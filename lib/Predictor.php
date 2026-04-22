@@ -178,4 +178,74 @@ class Predictor
         if ($r >= $this->threshold) return 'below';
         return 'underperform';
     }
+
+    /**
+     * Vyhodnotí provider alarmy (Sungrow alarm_count, fault_status, offline).
+     * Vytvoří záznamy v `alerts` pro nové alarmy, auto-acknowledge pro vyřešené.
+     *
+     * Logika:
+     *   - alarm_count > 0 nebo fault_status ∈ {1,2}  → vytvoř/zachovej 'communication' alert
+     *   - alarm_count = 0 a fault_status = 3 (zdravé) → auto-ack existující 'communication' alerty
+     */
+    public function evaluateProviderAlarms(): void
+    {
+        $plants = Database::all(
+            'SELECT id, code, name, alarm_count, fault_status, ps_status
+             FROM plants WHERE is_active = 1'
+        );
+
+        foreach ($plants as $p) {
+            $hasAlarm = ($p['alarm_count'] > 0)
+                     || in_array((int) $p['fault_status'], [1, 2], true);
+
+            // Aktivní (nepotvrzený) communication alert pro tuto FVE?
+            $activeAlert = Database::one(
+                "SELECT id FROM alerts
+                 WHERE plant_id = ? AND type = 'communication'
+                   AND acknowledged_at IS NULL
+                 LIMIT 1",
+                [$p['id']]
+            );
+
+            if ($hasAlarm && !$activeAlert) {
+                // Vytvoř nový alert
+                $severity = ((int) $p['fault_status']) === 2 ? 'warning' : 'critical';
+                if ($p['alarm_count'] >= 3) $severity = 'critical';
+
+                $faultMap = [0 => 'OK', 1 => 'critical', 2 => 'warning', 3 => 'OK'];
+                $faultText = $faultMap[(int) $p['fault_status']] ?? 'unknown';
+
+                $msg = sprintf(
+                    'Cloud hlásí %d %s na FVE (fault_status=%s)',
+                    (int) $p['alarm_count'],
+                    $p['alarm_count'] === 1 ? 'alarm' : 'alarmů',
+                    $faultText
+                );
+
+                Database::pdo()->prepare(
+                    "INSERT INTO alerts (plant_id, type, severity, message, metric, created_at)
+                     VALUES (?, 'communication', ?, ?, ?, NOW())"
+                )->execute([
+                    $p['id'],
+                    $severity,
+                    $msg,
+                    json_encode([
+                        'alarm_count'  => (int) $p['alarm_count'],
+                        'fault_status' => (int) $p['fault_status'],
+                        'ps_status'    => (int) $p['ps_status'],
+                    ]),
+                ]);
+
+            } elseif (!$hasAlarm && $activeAlert) {
+                // FVE je teď OK, ale máme starý alert → auto-ack
+                Database::pdo()->prepare(
+                    "UPDATE alerts
+                     SET acknowledged_at = NOW(),
+                         acknowledgement_note = '[Auto] Cloud hlásí, že problém pominul.'
+                     WHERE id = ?"
+                )->execute([$activeAlert['id']]);
+            }
+        }
+    }
+
 }

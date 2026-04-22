@@ -37,6 +37,12 @@ try {
         'vapid_key'     => actionVapidKey(),
         'push_subscribe'=> actionPushSubscribe(),
         'push_test'     => actionPushTest((int) ($_GET['id'] ?? 0)),
+        'passkey_register_start'  => actionPasskeyRegisterStart(),
+        'passkey_register_finish' => actionPasskeyRegisterFinish(),
+        'passkey_login_start'     => actionPasskeyLoginStart(),
+        'passkey_login_finish'    => actionPasskeyLoginFinish(),
+        'passkey_list'            => actionPasskeyList(),
+        'passkey_delete'          => actionPasskeyDelete((int) ($_GET['id'] ?? 0)),
         default    => ['error' => 'Neznámá akce: ' . $action],
     };
     echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -299,3 +305,106 @@ function actionPushTest(int $subId): array
     return ['sent' => count($results), 'results' => $results];
 }
 
+
+// ═══════════════════════════════════════════════════════════
+// Passkey / WebAuthn akce
+// ═══════════════════════════════════════════════════════════
+
+function actionPasskeyRegisterStart(): array
+{
+    if (!\FveMonitor\Lib\Auth::isLoggedIn()) {
+        http_response_code(401);
+        return ['error' => 'Musíš být přihlášen pro přidání passkey'];
+    }
+    try {
+        $user = \FveMonitor\Lib\Auth::currentUser();
+        $passkey = new \FveMonitor\Lib\Passkey();
+        return $passkey->createRegistrationOptions($user);
+    } catch (\Throwable $e) {
+        return ['error' => 'Chyba: ' . $e->getMessage()];
+    }
+}
+
+function actionPasskeyRegisterFinish(): array
+{
+    if (!\FveMonitor\Lib\Auth::isLoggedIn()) {
+        http_response_code(401);
+        return ['error' => 'Musíš být přihlášen'];
+    }
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw, true);
+    if (!is_array($data) || empty($data['response'])) {
+        return ['error' => 'Chybí response v POST body'];
+    }
+
+    $deviceName = $data['device_name'] ?? null;
+    $passkey = new \FveMonitor\Lib\Passkey();
+    $result = $passkey->verifyRegistrationResponse(
+        json_encode($data['response']),
+        $deviceName
+    );
+
+    if (!$result['success']) {
+        return ['error' => $result['error'] ?? 'Registrace selhala'];
+    }
+    return ['ok' => true, 'credential_id' => $result['credential_id']];
+}
+
+function actionPasskeyLoginStart(): array
+{
+    $passkey = new \FveMonitor\Lib\Passkey();
+    return $passkey->createLoginOptions();
+}
+
+function actionPasskeyLoginFinish(): array
+{
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return ['error' => 'Chybí data v POST body'];
+    }
+
+    $passkey = new \FveMonitor\Lib\Passkey();
+    $result = $passkey->verifyLoginResponse(json_encode($data));
+
+    if (!$result['success']) {
+        http_response_code(401);
+        return ['error' => $result['error'] ?? 'Login selhal'];
+    }
+    return ['ok' => true, 'user' => $result['user']];
+}
+
+function actionPasskeyList(): array
+{
+    if (!\FveMonitor\Lib\Auth::isLoggedIn()) {
+        http_response_code(401);
+        return ['error' => 'Musíš být přihlášen'];
+    }
+    $user = \FveMonitor\Lib\Auth::currentUser();
+    $rows = \FveMonitor\Lib\Passkey::getUserCredentials((int) $user['id']);
+
+    // Nevracíme citlivá data - jen metadata
+    $out = array_map(fn($r) => [
+        'id'           => (int) $r['id'],
+        'device_name'  => $r['device_name'],
+        'transports'   => $r['transports'],
+        'created_at'   => $r['created_at'],
+        'last_used_at' => $r['last_used_at'],
+    ], $rows);
+
+    return ['credentials' => $out];
+}
+
+function actionPasskeyDelete(int $credId): array
+{
+    if (!\FveMonitor\Lib\Auth::isLoggedIn()) {
+        http_response_code(401);
+        return ['error' => 'Musíš být přihlášen'];
+    }
+    if ($credId <= 0) return ['error' => 'Chybí ID'];
+
+    $user = \FveMonitor\Lib\Auth::currentUser();
+    $ok = \FveMonitor\Lib\Passkey::deleteCredential($credId, (int) $user['id']);
+
+    return ['ok' => $ok];
+}

@@ -21,6 +21,7 @@ $currentUser = \FveMonitor\Lib\Auth::currentUser();
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#f5b800">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="FVE Monitor">
     <link rel="apple-touch-icon" href="assets/icon-192.png">
@@ -67,6 +68,13 @@ $currentUser = \FveMonitor\Lib\Auth::currentUser();
             <span class="menu-icon">📋</span>
             <span class="menu-label">Historie alertů</span>
         </a>
+
+        <?php if ($currentUser): ?>
+        <a href="admin/profile.php" class="menu-item">
+            <span class="menu-icon">👤</span>
+            <span class="menu-label">Můj profil</span>
+        </a>
+        <?php endif; ?>
 
         <a href="https://grafana.sunlai.org/" target="_blank" class="menu-item">
             <span class="menu-icon">📊</span>

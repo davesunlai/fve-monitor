@@ -102,6 +102,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             margin-bottom: 1rem;
             font-size: 0.9rem;
         }
+        .passkey-section {
+            margin-top: 1.5rem;
+        }
+        .passkey-divider {
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            margin: 1rem 0;
+            position: relative;
+        }
+        .passkey-divider::before,
+        .passkey-divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background: var(--border);
+        }
+        .passkey-divider::before { left: 0; }
+        .passkey-divider::after { right: 0; }
+        .passkey-divider span {
+            background: var(--surface);
+            padding: 0 10px;
+        }
+        .passkey-login-btn {
+            width: 100%;
+            padding: 12px;
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .passkey-login-btn:hover {
+            background: rgba(245, 184, 0, 0.1);
+        }
+        .passkey-login-btn:disabled {
+            opacity: 0.5;
+            cursor: wait;
+        }
+        .passkey-status {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            text-align: center;
+        }
+        .passkey-status.error { color: var(--bad); }
+        .passkey-status.success { color: var(--good); }
     </style>
 </head>
 <body>
@@ -128,10 +178,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button type="submit">Přihlásit se</button>
         </form>
 
+        <div class="passkey-section">
+            <div class="passkey-divider"><span>nebo</span></div>
+            <button type="button" id="passkey-login" class="passkey-login-btn">
+                🔐 Přihlásit biometrikou (Passkey)
+            </button>
+            <div id="passkey-status" class="passkey-status"></div>
+        </div>
+
         <p style="text-align:center;margin-top:1.5rem;font-size:0.85rem;color:var(--text-dim)">
             <a href="/" style="color:var(--text-dim)">← Zpět na dashboard</a>
         </p>
     </div>
 </div>
+<script>
+function base64urlToBuffer(b64url) {
+    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+    const raw = atob(padded);
+    const buf = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
+    return buf.buffer;
+}
+
+function bufferToBase64url(buf) {
+    const bytes = new Uint8Array(buf);
+    let str = '';
+    for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
+    return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+const passkeyBtn = document.getElementById('passkey-login');
+const statusEl = document.getElementById('passkey-status');
+
+if (!window.PublicKeyCredential) {
+    if (passkeyBtn) passkeyBtn.style.display = 'none';
+    if (statusEl) statusEl.textContent = 'Passkey není v tomto prohlížeči podporován.';
+}
+
+passkeyBtn?.addEventListener('click', async () => {
+    passkeyBtn.disabled = true;
+    statusEl.className = 'passkey-status';
+    statusEl.textContent = '⏳ Čekám na biometriku...';
+
+    try {
+        const optsResp = await fetch('../api.php?action=passkey_login_start');
+        const opts = await optsResp.json();
+        if (opts.error) throw new Error(opts.error);
+
+        const publicKey = {
+            ...opts,
+            challenge: base64urlToBuffer(opts.challenge),
+        };
+        if (opts.allowCredentials) {
+            publicKey.allowCredentials = opts.allowCredentials.map(c => ({
+                ...c,
+                id: base64urlToBuffer(c.id),
+            }));
+        }
+
+        const credential = await navigator.credentials.get({ publicKey });
+
+        const response = {
+            id: credential.id,
+            rawId: bufferToBase64url(credential.rawId),
+            type: credential.type,
+            response: {
+                clientDataJSON:    bufferToBase64url(credential.response.clientDataJSON),
+                authenticatorData: bufferToBase64url(credential.response.authenticatorData),
+                signature:         bufferToBase64url(credential.response.signature),
+                userHandle: credential.response.userHandle
+                    ? bufferToBase64url(credential.response.userHandle) : null,
+            },
+            clientExtensionResults: credential.getClientExtensionResults(),
+        };
+
+        const loginResp = await fetch('../api.php?action=passkey_login_finish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(response),
+        });
+        const loginData = await loginResp.json();
+        if (loginData.error) throw new Error(loginData.error);
+
+        statusEl.className = 'passkey-status success';
+        statusEl.textContent = '✓ Přihlášeno. Přesměrovávám...';
+
+        const params = new URLSearchParams(location.search);
+        const redirect = params.get('r') || 'index.php';
+        setTimeout(() => location.href = redirect, 500);
+
+    } catch (e) {
+        console.error('Passkey login error:', e);
+        let msg = e.message || 'Neznámá chyba';
+        if (e.name === 'NotAllowedError') msg = 'Přihlášení bylo zrušeno nebo vypršel čas.';
+
+        statusEl.className = 'passkey-status error';
+        statusEl.textContent = '⚠ ' + msg;
+    } finally {
+        passkeyBtn.disabled = false;
+    }
+});
+</script>
 </body>
 </html>

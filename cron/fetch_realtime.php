@@ -95,3 +95,28 @@ foreach ($plants as $plant) {
 Database::pdo()->exec(
     'DELETE FROM production_realtime WHERE ts < NOW() - INTERVAL 7 DAY'
 );
+
+// Vyhodnoť provider alarmy (Sungrow cloud alarms → alerts tabulka)
+try {
+    (new \FveMonitor\Lib\Predictor())->evaluateProviderAlarms();
+    echo "[$ts] Provider alarmy vyhodnoceny\n";
+} catch (\Throwable $e) {
+    echo "[$ts] CHYBA evaluateProviderAlarms: {$e->getMessage()}\n";
+}
+
+// Pošli push pro nové alerty (created v posledních 60s a ještě neposlané)
+try {
+    $newAlerts = \FveMonitor\Lib\Database::all(
+        "SELECT COUNT(*) AS cnt FROM alerts
+         WHERE push_sent_at IS NULL
+           AND created_at > NOW() - INTERVAL 60 SECOND
+           AND severity IN ('warning', 'critical')"
+    );
+    if (!empty($newAlerts) && (int) $newAlerts[0]['cnt'] > 0) {
+        echo "[$ts] {$newAlerts[0]['cnt']} nových alertů → push spuštěn\n";
+        // Spusť send_push.php inline
+        require __DIR__ . '/send_push.php';
+    }
+} catch (\Throwable $e) {
+    echo "[$ts] CHYBA push: {$e->getMessage()}\n";
+}

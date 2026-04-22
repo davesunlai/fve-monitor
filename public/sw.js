@@ -40,6 +40,12 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
+    // Admin stránky (login, logout, admin UI) - NIKDY z cache, vždy live
+    if (url.pathname.startsWith('/admin/')) {
+        event.respondWith(fetch(event.request));
+        return;
+    }
+
     // API volání: network-first, cache fallback
     if (url.pathname.includes('/api.php')) {
         event.respondWith(
@@ -115,3 +121,17 @@ self.addEventListener('message', event => {
 // Deploy: 1776837804
 // Mobile test: 08:06:53
 // Deploy hamburger: 1776838650
+// Deploy passkey profile: 1776841581
+// Deploy passkey test: 1776858234
+// Test po Cache-Control opravě: 1776860721
+// Test po Cache-Control opravě: 1776860841
+// Deploy meta-fix: 1776860977
+// Deploy passkey fix: 1776861374
+// Deploy passkey fix: 1776861558
+// Deploy passkey login button: 1776862082
+// Deploy login button fix: 1776862171
+// Deploy login button fix: 1776862226
+// Deploy login button awk: 1776867800
+// Deploy passkey validator args: 1776867996
+// Deploy passkey attestation manager: 1776868043
+// Deploy admin no-cache: 1776868214

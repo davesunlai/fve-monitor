@@ -35,6 +35,7 @@ $plants = Database::all(
     </div>
 <div style="margin-left:auto;color:var(--text-dim);font-size:0.85rem">
             <?= htmlspecialchars($u['full_name'] ?? $u['username'] ?? '') ?>
+            · <a href="profile.php" style="color:var(--text-dim)">Profil</a>
             · <a href="logout.php" style="color:var(--text-dim)">Odhlásit</a>
         </div>
     </header>

@@ -7,7 +7,8 @@
         "ext-curl": "*",
         "ext-json": "*",
         "ext-openssl": "*",
-        "minishlink/web-push": "^9.0"
+        "minishlink/web-push": "^9.0",
+        "web-auth/webauthn-lib": "^4.9"
     },
     "autoload": {
         "psr-4": {
