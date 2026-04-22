@@ -1,0 +1,32 @@
+# ═══ CITLIVÉ SOUBORY — NIKDY DO GITU ═══
+config/config.php
+config/*.local.php
+*.pem
+*.key
+*.p12
+.my.cnf
+.env
+.env.local
+
+# ═══ RUNTIME / GENEROVANÉ SOUBORY ═══
+vendor/
+composer.lock
+logs/
+*.log
+public/uploads/
+tmp/
+
+# ═══ BACKUPS ═══
+*.bak
+*.bak-*
+*.backup
+*~
+
+# ═══ OS / EDITOR ═══
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+nohup.out
