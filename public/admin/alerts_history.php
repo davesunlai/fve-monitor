@@ -180,6 +180,77 @@ function severityBadge(string $sev): string {
             .history-table { font-size: 0.85rem; }
             .history-table .col-message { max-width: 200px; }
         }
+        .btn-details {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            cursor: pointer;
+            padding: 2px 8px;
+            border-radius: 3px;
+            margin-right: 6px;
+            font-size: 0.9rem;
+        }
+        .btn-details:hover {
+            background: var(--surface-2);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .details-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 9999;
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .details-modal[style*="none"] { display: none !important; }
+        .details-modal-content {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            max-width: 800px;
+            width: 100%;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .details-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .details-modal-header h3 {
+            margin: 0;
+            font-size: 1rem;
+        }
+        .modal-close {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-size: 1.5rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0 6px;
+        }
+        .modal-close:hover { color: var(--text); }
+        .details-modal-body {
+            overflow: auto;
+            padding: 1rem 1.5rem;
+        }
+        #modal-json {
+            background: var(--surface-2);
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 0.82rem;
+            color: var(--text);
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
     </style>
 </head>
 <body>
@@ -283,6 +354,9 @@ function severityBadge(string $sev): string {
                     <td><?= severityBadge($a['severity']) ?></td>
                     <td class="col-message"><?= htmlspecialchars($a['message']) ?></td>
                     <td>
+                        <?php if (!empty($a['metric'])): ?>
+                            <button class="btn-details" onclick="showDetails(<?= (int) $a['id'] ?>, this)" type="button" title="Zobrazit raw data">📊</button>
+                        <?php endif; ?>
                         <?php if ($a['acknowledged_at'] === null): ?>
                             <span class="status-active">● Aktivní</span>
                         <?php else: ?>
@@ -309,6 +383,46 @@ function severityBadge(string $sev): string {
     <p style="text-align:center;margin-top:1rem;color:var(--text-dim);font-size:0.85rem">
         Zobrazeno <?= count($alerts) ?> záznamů (max 500)
     </p>
+
+    <!-- Skryté JSON detaily pro modal -->
+    <?php foreach ($alerts as $a): ?>
+        <?php if (!empty($a['metric'])): ?>
+            <pre id="metric-<?= (int) $a['id'] ?>" style="display:none"><?= htmlspecialchars(json_encode(json_decode($a['metric'], true), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?></pre>
+        <?php endif; ?>
+    <?php endforeach; ?>
+
+    <!-- Modal -->
+    <div id="details-modal" class="details-modal" onclick="closeDetails(event)" style="display:none">
+        <div class="details-modal-content" onclick="event.stopPropagation()">
+            <div class="details-modal-header">
+                <h3>Raw data alertu #<span id="modal-alert-id">—</span></h3>
+                <button class="modal-close" onclick="closeDetails()" type="button">×</button>
+            </div>
+            <div class="details-modal-body">
+                <pre id="modal-json"></pre>
+            </div>
+        </div>
+    </div>
+
 </main>
+<script>
+function showDetails(alertId) {
+    const pre = document.getElementById('metric-' + alertId);
+    if (!pre) {
+        alert('Žádná raw data pro tento alert');
+        return;
+    }
+    document.getElementById('modal-alert-id').textContent = alertId;
+    document.getElementById('modal-json').textContent = pre.textContent;
+    document.getElementById('details-modal').style.display = 'flex';
+}
+function closeDetails(event) {
+    if (event && event.target.id !== 'details-modal' && event.target.className !== 'modal-close') return;
+    document.getElementById('details-modal').style.display = 'none';
+}
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeDetails();
+});
+</script>
 </body>
 </html>

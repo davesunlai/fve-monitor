@@ -212,15 +212,35 @@ class Predictor
                 $severity = ((int) $p['fault_status']) === 2 ? 'warning' : 'critical';
                 if ($p['alarm_count'] >= 3) $severity = 'critical';
 
-                $faultMap = [0 => 'OK', 1 => 'critical', 2 => 'warning', 3 => 'OK'];
-                $faultText = $faultMap[(int) $p['fault_status']] ?? 'unknown';
+                // Status mapy
+                $faultMap = [0 => 'OK', 1 => '🚨 chyba', 2 => '⚠️ warning', 3 => 'OK'];
+                $statusMap = [0 => 'offline', 1 => 'běží', 2 => 'standby', 3 => 'odpojeno'];
+                $gridMap = [0 => 'připojeno', 1 => 'odpojeno'];
 
-                $msg = sprintf(
-                    'Cloud hlásí %d %s na FVE (fault_status=%s)',
-                    (int) $p['alarm_count'],
-                    $p['alarm_count'] === 1 ? 'alarm' : 'alarmů',
-                    $faultText
-                );
+                $faultText = $faultMap[(int) $p['fault_status']] ?? 'neznámý';
+                $statusText = $statusMap[(int) $p['ps_status']] ?? 'neznámý';
+
+                // Načti detaily z raw_data (pokud máme)
+                $rawData = json_decode($p['raw_data'] ?? 'null', true);
+                $faultCount = (int) ($rawData['fault_count'] ?? 0);
+                $gridStatus = (int) ($rawData['grid_connection_status'] ?? 0);
+                $currPower = (float) ($rawData['curr_power']['value'] ?? 0);
+
+                // Sestavit srozumitelnou hlášku
+                $parts = [];
+                if ($faultCount > 0) {
+                    $parts[] = sprintf('🚨 %d kritická %s', $faultCount, $faultCount === 1 ? 'chyba' : 'chyb');
+                }
+                if ((int) $p['alarm_count'] > 0) {
+                    $parts[] = sprintf('⚠️ %d %s', (int) $p['alarm_count'], (int) $p['alarm_count'] === 1 ? 'alarm' : 'alarmů');
+                }
+                $parts[] = 'stav: ' . $statusText;
+                if ($gridStatus !== 0) {
+                    $parts[] = '🔌 odpojeno od sítě';
+                }
+                $parts[] = sprintf('výkon %.1f kW', $currPower);
+
+                $msg = 'Cloud: ' . implode(' · ', $parts);
 
                 // Načti raw_data ze Sungrow (uloženo při fetch_realtime)
                 $rawData = json_decode($p['raw_data'] ?? 'null', true);

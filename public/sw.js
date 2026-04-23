@@ -135,3 +135,5 @@ self.addEventListener('message', event => {
 // Deploy passkey validator args: 1776867996
 // Deploy passkey attestation manager: 1776868043
 // Deploy admin no-cache: 1776868214
+// Deploy alarm details modal: 1776931834
+// Deploy alarm modal fix: 1776931963
