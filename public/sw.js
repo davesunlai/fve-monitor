@@ -138,3 +138,6 @@ self.addEventListener('message', event => {
 // Deploy alarm details modal: 1776931834
 // Deploy alarm modal fix: 1776931963
 // Deploy iSolarCloud link: 1776932867
+// Deploy linkify use: 1776933021
+// Deploy linkify dash: 1776933075
+// Deploy linkify history: 1776933157

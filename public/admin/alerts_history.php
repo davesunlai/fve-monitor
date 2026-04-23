@@ -74,6 +74,19 @@ function severityBadge(string $sev): string {
     return "<span style=\"$style;padding:2px 8px;border-radius:999px;font-size:0.8rem\">$icon " . htmlspecialchars($sev) . "</span>";
 }
 ?>
+<?php
+/**
+ * Helper: HTML-escape a převod URL na klikatelné <a> odkazy.
+ */
+function messageLinkify(string $text): string {
+    $escaped = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    return preg_replace(
+        '/(https?:\/\/\S+)|(isolarcloud\.eu\/\S+)/',
+        '<a href="$0" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">🔗 detail</a>',
+        $escaped
+    );
+}
+?>
 <!DOCTYPE html>
 <html lang="cs">
 <head>
@@ -352,7 +365,7 @@ function severityBadge(string $sev): string {
                     </td>
                     <td><?= htmlspecialchars($a['type']) ?></td>
                     <td><?= severityBadge($a['severity']) ?></td>
-                    <td class="col-message"><?= htmlspecialchars($a['message']) ?></td>
+                    <td class="col-message"><?= messageLinkify($a['message']) ?></td>
                     <td>
                         <?php if (!empty($a['metric'])): ?>
                             <button class="btn-details" onclick="showDetails(<?= (int) $a['id'] ?>, this)" type="button" title="Zobrazit raw data">📊</button>

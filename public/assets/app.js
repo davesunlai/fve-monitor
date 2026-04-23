@@ -452,7 +452,7 @@ function renderAlerts(alerts) {
     list.innerHTML = alerts.map(a => `
         <li class="severity-${a.severity}">
             <div class="alert-message">
-                <strong>${escapeHtml(a.plant_name)}</strong> · ${escapeHtml(a.message)}
+                <strong>${escapeHtml(a.plant_name)}</strong> · ${linkifyUrls(a.message)}
                 <div class="alert-meta">${formatRelative(a.created_at)}</div>
             </div>
             <button class="alert-ack" onclick="ackAlert(${a.id})">Potvrdit</button>
@@ -759,12 +759,14 @@ if (document.readyState === 'loading') {
     initMenu();
 }
 
-// Auto-linkify URL v textu
+// Auto-linkify URL v textu (bezpečné - HTML escape + pak linkify)
 function linkifyUrls(text) {
-    if (!text) return '';
-    // Najdi URL patterns (http://, https://, nebo isolarcloud.eu/...)
-    return text.replace(
+    const escaped = escapeHtml(text);
+    return escaped.replace(
         /(https?:\/\/[^\s]+)|(isolarcloud\.eu\/[^\s]+)/g,
-        m => `<a href="${m.startsWith('http') ? m : 'https://' + m}" target="_blank" rel="noopener" style="color:var(--accent)">${m}</a>`
+        m => {
+            const url = m.startsWith('http') ? m : 'https://' + m;
+            return `<a href="${url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">🔗 detail</a>`;
+        }
     );
 }
