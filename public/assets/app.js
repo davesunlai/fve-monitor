@@ -758,3 +758,13 @@ if (document.readyState === 'loading') {
 } else {
     initMenu();
 }
+
+// Auto-linkify URL v textu
+function linkifyUrls(text) {
+    if (!text) return '';
+    // Najdi URL patterns (http://, https://, nebo isolarcloud.eu/...)
+    return text.replace(
+        /(https?:\/\/[^\s]+)|(isolarcloud\.eu\/[^\s]+)/g,
+        m => `<a href="${m.startsWith('http') ? m : 'https://' + m}" target="_blank" rel="noopener" style="color:var(--accent)">${m}</a>`
+    );
+}

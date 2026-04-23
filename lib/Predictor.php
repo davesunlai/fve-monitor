@@ -242,6 +242,12 @@ class Predictor
 
                 $msg = 'Cloud: ' . implode(' · ', $parts);
 
+                // Přidej odkaz do iSolarCloud (pro detailní zobrazení alarmu)
+                $psId = (int) ($rawData['ps_id'] ?? 0);
+                if ($psId > 0) {
+                    $msg .= ' · 🔗 isolarcloud.eu/index.html#/operationCenter/index?psId=' . $psId;
+                }
+
                 // Načti raw_data ze Sungrow (uloženo při fetch_realtime)
                 $rawData = json_decode($p['raw_data'] ?? 'null', true);
 

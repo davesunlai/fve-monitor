@@ -137,3 +137,4 @@ self.addEventListener('message', event => {
 // Deploy admin no-cache: 1776868214
 // Deploy alarm details modal: 1776931834
 // Deploy alarm modal fix: 1776931963
+// Deploy iSolarCloud link: 1776932867
