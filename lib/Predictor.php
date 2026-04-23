@@ -190,7 +190,7 @@ class Predictor
     public function evaluateProviderAlarms(): void
     {
         $plants = Database::all(
-            'SELECT id, code, name, alarm_count, fault_status, ps_status
+            'SELECT id, code, name, alarm_count, fault_status, ps_status, raw_data
              FROM plants WHERE is_active = 1'
         );
 
@@ -222,6 +222,9 @@ class Predictor
                     $faultText
                 );
 
+                // Načti raw_data ze Sungrow (uloženo při fetch_realtime)
+                $rawData = json_decode($p['raw_data'] ?? 'null', true);
+
                 Database::pdo()->prepare(
                     "INSERT INTO alerts (plant_id, type, severity, message, metric, created_at)
                      VALUES (?, 'communication', ?, ?, ?, NOW())"
@@ -233,7 +236,8 @@ class Predictor
                         'alarm_count'  => (int) $p['alarm_count'],
                         'fault_status' => (int) $p['fault_status'],
                         'ps_status'    => (int) $p['ps_status'],
-                    ]),
+                        'raw_snapshot' => $rawData,
+                    ], JSON_UNESCAPED_UNICODE),
                 ]);
 
             } elseif (!$hasAlarm && $activeAlert) {

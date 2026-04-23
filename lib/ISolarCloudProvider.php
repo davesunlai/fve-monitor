@@ -269,13 +269,14 @@ class ISolarCloudProvider implements ProviderInterface
                     $ps['today_energy_kwh'],
                 ]);
 
-                // Aktualizuj stav elektrárny (alarmy, fault, status)
+                // Aktualizuj stav elektrárny (alarmy, fault, status, raw)
                 Database::pdo()->prepare(
-                    'UPDATE plants SET alarm_count = ?, fault_status = ?, ps_status = ? WHERE id = ?'
+                    'UPDATE plants SET alarm_count = ?, fault_status = ?, ps_status = ?, raw_data = ? WHERE id = ?'
                 )->execute([
                     $ps['alarm_count'],
                     (int) ($ps['raw']['ps_fault_status'] ?? 0),
                     (int) $ps['ps_status'],
+                    json_encode($ps['raw'] ?? $ps, JSON_UNESCAPED_UNICODE),
                     $plant['id'],
                 ]);
                 $updated++;
