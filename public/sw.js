@@ -141,3 +141,6 @@ self.addEventListener('message', event => {
 // Deploy linkify use: 1776933021
 // Deploy linkify dash: 1776933075
 // Deploy linkify history: 1776933157
+// Deploy OTE metadata: 1777016607
+// Deploy OTE id rozliseni: 1777164644
+// Deploy OTE address fields: 1777165436

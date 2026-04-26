@@ -30,6 +30,7 @@ $plants = Database::all(
     <div class="topbar-meta">
         <a href="../" class="btn btn-ghost">← Dashboard</a>
         <a href="alerts_history.php" class="btn">📋 Historie alertů</a>
+        <a href="plants_ote.php" class="btn">🏛️ OTE/ERÚ</a>
         <a href="import_isolarcloud.php" class="btn">⬇ Importovat z iSolarCloud</a>
         <a href="plant_edit.php" class="btn btn-primary">+ Nová elektrárna</a>
     </div>
