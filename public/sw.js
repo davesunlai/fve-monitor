@@ -144,3 +144,4 @@ self.addEventListener('message', event => {
 // Deploy OTE metadata: 1777016607
 // Deploy OTE id rozliseni: 1777164644
 // Deploy OTE address fields: 1777165436
+// Deploy OTE report: 1777165705
