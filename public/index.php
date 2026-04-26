@@ -164,6 +164,7 @@ $currentUser = \FveMonitor\Lib\Auth::currentUser();
             </div>
             <div class="chart-wrap">
                 <h3>Roční přehled — skutečnost vs PVGIS</h3>
+                <div id="yearly-year-tabs" class="year-tabs"></div>
                 <canvas id="chart-yearly"></canvas>
                 <div id="yearly-table"></div>
             </div>

@@ -210,15 +210,26 @@ async function openDetail(plantId, name) {
 
 async function refreshDetail(plantId) {
     try {
+        const currentYear = new Date().getFullYear();
+
+        // Při změně FVE resetuj vybraný rok (jinak udrž z kliků uživatele)
+        if (window._currentDetailPlantId !== plantId) {
+            window._selectedYear = null;
+        }
+        window._currentDetailPlantId = plantId;
+
+        const yearToLoad = window._selectedYear || currentYear;
+
         const [realtime, yearly, range48] = await Promise.all([
             fetchJson(`${API}?action=realtime&plant=${plantId}`),
-            fetchJson(`${API}?action=yearly&plant=${plantId}&y=${new Date().getFullYear()}`),
+            fetchJson(`${API}?action=yearly&plant=${plantId}&y=${yearToLoad}`),
             fetchJson(`${API}?action=range&plant=${plantId}&hours=48`),
         ]);
         renderRealtimeChart(realtime.samples);
         render48hChart(range48.samples);
         renderYearlyChart(yearly);
         renderYearlyTable(yearly);
+        renderYearTabs(yearly, yearToLoad);
         renderDetailMap(plantId);
     } catch (e) {
         console.error('Detail chyba:', e);
@@ -331,7 +342,13 @@ function renderYearlyChart(yearly) {
 function renderYearlyTable(yearly) {
     const months = ['Leden','Únor','Březen','Duben','Květen','Červen',
                     'Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
-    const currentMonth = new Date().getMonth() + 1;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const displayYear = parseInt(yearly.year || currentYear, 10);
+    const isCurrentYear = displayYear === currentYear;
+    const isPastYear = displayYear < currentYear;
+    const isFutureYear = displayYear > currentYear;
     let totalExpected = 0, totalActual = 0;
 
     const rows = months.map((name, i) => {
@@ -344,16 +361,23 @@ function renderYearlyTable(yearly) {
         const ratioPct = Math.round(ratio * 100);
         const diff = act - exp;
         let rowClass = '', statusIcon = '—';
-        if (m === currentMonth) { rowClass = 'row-current'; statusIcon = '▶'; }
-        else if (m > currentMonth) { rowClass = 'row-future'; statusIcon = '·'; }
+        let isFuture = false, isCurrent = false;
+        if (isCurrentYear) {
+            isCurrent = (m === currentMonth);
+            isFuture  = (m > currentMonth);
+        } else if (isFutureYear) {
+            isFuture = true;
+        }
+        if (isCurrent)     { rowClass = 'row-current'; statusIcon = '▶'; }
+        else if (isFuture) { rowClass = 'row-future';  statusIcon = '·'; }
         else if (act === 0) { rowClass = 'row-nodata'; statusIcon = '·'; }
         else if (ratio >= 0.95) { rowClass = 'row-ok'; statusIcon = '✓'; }
         else if (ratio >= 0.70) { rowClass = 'row-warn'; statusIcon = '⚠'; }
         else { rowClass = 'row-bad'; statusIcon = '✕'; }
-        const actualStr = (m > currentMonth || act === 0) ? '—' : formatEnergy(act);
-        const diffStr = (m > currentMonth || act === 0) ? '' :
+        const actualStr = (isFuture || act === 0) ? '—' : formatEnergy(act);
+        const diffStr = (isFuture || act === 0) ? '' :
             (diff >= 0 ? '+' : '') + formatEnergy(diff);
-        const ratioStr = (m > currentMonth || act === 0) ? '—' : ratioPct + ' %';
+        const ratioStr = (isFuture || act === 0) ? '—' : ratioPct + ' %';
         return `
             <tr class="${rowClass}">
                 <td class="col-icon">${statusIcon}</td>
@@ -769,4 +793,45 @@ function linkifyUrls(text) {
             return `<a href="${url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">🔗 detail</a>`;
         }
     );
+}
+
+
+// ───────── Roční přepínač (tabs) ─────────
+function renderYearTabs(yearly, currentYear) {
+    const container = document.getElementById('yearly-year-tabs');
+    if (!container) return;
+
+    const startYear = parseInt(yearly.start_year || (currentYear - 1), 10);
+    const endYear   = new Date().getFullYear();
+    const activeYear = window._selectedYear || currentYear;
+
+    const years = [];
+    for (let y = startYear; y <= endYear; y++) years.push(y);
+
+    container.innerHTML = years.map(y =>
+        `<button class="${y === activeYear ? 'active' : ''}" data-year="${y}">${y}</button>`
+    ).join('');
+
+    container.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => loadYearForChart(parseInt(btn.dataset.year, 10)));
+    });
+}
+
+async function loadYearForChart(year) {
+    const plantId = window._currentDetailPlantId;
+    if (!plantId) return;
+
+    window._selectedYear = year;
+
+    try {
+        const yearly = await fetchJson(`${API}?action=yearly&plant=${plantId}&y=${year}`);
+        renderYearlyChart(yearly);
+        renderYearlyTable(yearly);
+        // Update active button
+        document.querySelectorAll('#yearly-year-tabs button').forEach(b => {
+            b.classList.toggle('active', parseInt(b.dataset.year, 10) === year);
+        });
+    } catch (e) {
+        console.error('Chyba načítání roku:', e);
+    }
 }

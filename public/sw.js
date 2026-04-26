@@ -148,3 +148,7 @@ self.addEventListener('message', event => {
 // Deploy CSV import: 1777167705
 // Deploy code regex fix: 1777168002
 // Deploy CSV import v2 strategy: 1777172282
+// Deploy year tabs: 1777173910
+// Deploy year persist: 1777174938
+// Deploy yearly table fix: 1777175514
+// Deploy yearly table fix v2: 1777175644
