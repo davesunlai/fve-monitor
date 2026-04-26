@@ -145,3 +145,6 @@ self.addEventListener('message', event => {
 // Deploy OTE id rozliseni: 1777164644
 // Deploy OTE address fields: 1777165436
 // Deploy OTE report: 1777165705
+// Deploy CSV import: 1777167705
+// Deploy code regex fix: 1777168002
+// Deploy CSV import v2 strategy: 1777172282

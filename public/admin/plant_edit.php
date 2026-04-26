@@ -146,8 +146,8 @@ if (!empty($_GET['saved'])) $notice = 'Uloženo.';
 function validateInput(array $post): array
 {
     $code = trim($post['code'] ?? '');
-    if (!preg_match('/^[A-Z0-9_]{2,32}$/', $code)) {
-        throw new \RuntimeException('Kód musí obsahovat jen A-Z, 0-9, _ (2–32 znaků)');
+    if (!preg_match('/^[A-Z0-9_.-]{2,32}$/', $code)) {
+        throw new \RuntimeException('Kód musí obsahovat jen A-Z, 0-9, _ . - (2–32 znaků)');
     }
     $name = trim($post['name'] ?? '');
     if ($name === '') throw new \RuntimeException('Název nesmí být prázdný');
@@ -250,9 +250,9 @@ $p = $plant ?? $defaults;
         <section class="form-card">
             <h3>Základní info</h3>
             <div class="form-row">
-                <label>Kód <small>(A-Z, 0-9, _)</small>
+                <label>Kód <small>(A-Z, 0-9, _ . -)</small>
                     <input type="text" name="code" value="<?= htmlspecialchars($p['code']) ?>"
-                        pattern="[A-Z0-9_]{2,32}" required>
+                        pattern="[A-Z0-9_.\-]{2,32}" required>
                 </label>
                 <label>Název
                     <input type="text" name="name" value="<?= htmlspecialchars($p['name']) ?>" required>

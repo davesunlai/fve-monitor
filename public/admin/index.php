@@ -32,6 +32,7 @@ $plants = Database::all(
         <a href="alerts_history.php" class="btn">📋 Historie alertů</a>
         <a href="plants_ote.php" class="btn">🏛️ OTE/ERÚ</a>
         <a href="ote_report.php" class="btn">📊 Měsíční výkaz</a>
+        <a href="import_csv.php" class="btn">📥 Import CSV</a>
         <a href="import_isolarcloud.php" class="btn">⬇ Importovat z iSolarCloud</a>
         <a href="plant_edit.php" class="btn btn-primary">+ Nová elektrárna</a>
     </div>
