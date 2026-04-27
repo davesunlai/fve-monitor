@@ -259,7 +259,7 @@ async function refreshDetail(plantId) {
         const [realtime, yearly, range48] = await Promise.all([
             fetchJson(`${API}?action=realtime&plant=${plantId}`),
             fetchJson(`${API}?action=yearly&plant=${plantId}&y=${yearToLoad}`),
-            fetchJson(`${API}?action=range&plant=${plantId}&hours=48`),
+            fetchJson(`${API}?action=range&plant=${plantId}&hours=96`),
         ]);
         renderRealtimeChart(realtime.samples);
         render48hChart(range48.samples);

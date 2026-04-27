@@ -144,7 +144,7 @@ $currentUser = \FveMonitor\Lib\Auth::currentUser();
                         <th class="col-num">PVGIS měsíc</th>
                         <th class="col-num">Plnění</th>
                         <th class="col-num">Update</th>
-                        <th class="col-sparkline">48h průběh</th>
+                        <th class="col-sparkline">4denní průběh</th>
                         <th class="col-num">Alarmy</th>
                     </tr>
                 </thead>
@@ -173,7 +173,7 @@ $currentUser = \FveMonitor\Lib\Auth::currentUser();
                 <div id="yearly-table"></div>
             </div>
             <div class="chart-wrap">
-                <h3>48hodinový průběh výkonu</h3>
+                <h3>4denní průběh výkonu</h3>
                 <canvas id="chart-48h"></canvas>
             </div>
             <div class="chart-wrap chart-wrap-map">

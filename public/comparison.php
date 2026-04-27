@@ -184,10 +184,10 @@ $months = ['leden','únor','březen','duben','květen','červen','červenec','sr
 .btn-secondary:hover { border-color: var(--accent); }
 
 .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; max-height: 75vh; }
-.comparison-table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 0.82rem; }
-.comparison-table th, .comparison-table td { padding: 6px 8px; text-align: center; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
-.comparison-table th { background: var(--surface-2); color: var(--text-dim); font-size: 0.78rem; letter-spacing: 0.3px; white-space: nowrap; position: sticky; top: 0; z-index: 2; font-weight: 700; }
-.comparison-table th div { text-transform: none; font-size: 0.72rem; opacity: 0.85; }
+.comparison-table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 0.72rem; table-layout: fixed; }
+.comparison-table th, .comparison-table td { padding: 4px 4px; text-align: center; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); overflow: hidden; }
+.comparison-table th { background: var(--surface-2); color: var(--text-dim); font-size: 0.68rem; letter-spacing: 0.2px; white-space: normal; position: sticky; top: 0; z-index: 2; font-weight: 700; line-height: 1.2; }
+.comparison-table th div { text-transform: none; font-size: 0.62rem; opacity: 0.85; line-height: 1.2; }
 .comparison-table th.day-col { text-align: left; min-width: 50px; position: sticky; left: 0; z-index: 4; }
 .comparison-table td.day-cell { background: var(--surface-2); font-weight: 600; text-align: left; position: sticky; left: 0; color: var(--text-dim); z-index: 1; }
 .cell-ok       { background: rgba(63, 185, 80, 0.30); color: var(--text); }
@@ -196,9 +196,10 @@ $months = ['leden','únor','březen','duben','květen','červen','červenec','sr
 .cell-warn-pos { background: rgba(125, 145, 175, 0.28); color: var(--text); }
 .cell-bad-pos  { background: rgba(56, 139, 253, 0.45); color: var(--text); }
 .cell-nodata { color: var(--text-dim); background: var(--surface); }
-.cell-kwh { font-weight: 700; font-size: 1rem; color: var(--text); }
-.unit-suffix { font-size: 0.65rem; opacity: 0.55; font-weight: 500; margin-left: 2px; }
-.cell-pct { font-size: 0.78rem; opacity: 0.95; display: block; margin-top: 3px; font-weight: 600; }
+.cell-kwh { font-weight: 700; font-size: 0.82rem; color: var(--text); display: block; }
+.unit-suffix { font-size: 0.58rem; opacity: 0.5; font-weight: 500; margin-left: 1px; }
+.cell-pct { font-size: 0.7rem; opacity: 0.95; display: block; margin-top: 1px; font-weight: 600; }
+.cell-prod { font-size: 0.65rem; opacity: 0.65; display: block; margin-top: 1px; font-weight: 500; font-family: monospace; }
 
 tfoot tr { background: var(--surface-2); font-weight: 700; }
 tfoot td { border-top: 2px solid var(--border); }
@@ -446,21 +447,18 @@ window.toggleAll = function(check) {
                     default   => 'denní Ø',
                 };
                 ?>
-                <th style="min-width:90px">Ø všech FVE<br><small style="font-weight:400;opacity:0.7;font-size:0.7rem"><?= $headerLabel ?> kWh/kWp/den</small></th>
+                <th style="width:62px;min-width:62px;max-width:62px">Ø všech<br><small style="font-weight:400;opacity:0.6;font-size:0.6rem"><?= $headerLabel ?></small></th>
                 <?php foreach ($plants as $p):
                     $pStats = $plantProductivity[(int)$p['id']];
                     $pAvg = $pStats['days'] > 0 ? $pStats['sum'] / $pStats['days'] : 0;
                 ?>
                     <th>
                         <?= htmlspecialchars($p['name']) ?>
-                        <div style="font-size:0.7rem;font-weight:400;opacity:0.7;margin-top:2px">
+                        <div style="font-size:0.62rem;font-weight:400;opacity:0.7;margin-top:1px">
                             <?= number_format((float)$p['peak_power_kwp'], 0, ',', ' ') ?> kWp
                         </div>
-                        <div style="font-size:0.7rem;font-weight:600;color:var(--accent);margin-top:3px" title="Průměrná denní specifická výroba FVE za vybraný měsíc (=průměr ze všech denních productivit)">
-                            Ø <?= number_format($pAvg, 3, ',', '') ?> kWh/kWp/měsíc
-                        </div>
-                        <div style="font-size:0.65rem;font-weight:400;opacity:0.55;margin-top:2px;font-style:italic">
-                            kWh denně<br>± % od průměru
+                        <div style="font-size:0.62rem;font-weight:600;color:var(--accent);margin-top:2px" title="Průměrná denní specifická výroba FVE za vybraný měsíc">
+                            Ø <?= number_format($pAvg, 3, ',', '') ?>
                         </div>
                     </th>
                 <?php endforeach; ?>
@@ -527,6 +525,7 @@ window.toggleAll = function(check) {
                                 data-month-dev="<?= number_format(($monthlyBenchmark > 0) ? (($cell['productivity'] - $monthlyBenchmark) / $monthlyBenchmark) * 100 : 0, 2, '.', '') ?>"
                                 onclick="showDayDetail(this)">
                                 <span class="cell-kwh"><?= number_format($cell['kwh'], 1, ',', ' ') ?> <span class="unit-suffix">kWh</span></span>
+                                <span class="cell-prod"><?= number_format($cell['productivity'], 3, ',', '') ?> <span class="unit-suffix">kWh/kWp/den</span></span>
                                 <span class="cell-pct">
                                     <?= ($devPct >= 0 ? '+' : '') . number_format($devPct, 1, ',', '') ?> %
                                 </span>
