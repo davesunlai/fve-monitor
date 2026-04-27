@@ -181,3 +181,10 @@ self.addEventListener('message', event => {
 // Deploy modal complete v0.41: 1777266420
 // Deploy 15min data v0.42: 1777266762
 // Deploy 15min data v0.42: 1777266806
+// Deploy color split v0.44: 1777309088
+// Deploy color tweak v0.45: 1777309198
+// Deploy averages columns v0.46: 1777326776
+// Deploy avg column fix v0.47: 1777327434
+// Deploy unit clarify v0.48: 1777327741
+// Deploy unit fix v0.49: 1777328164
+// Deploy own avg mode v0.50: 1777328349

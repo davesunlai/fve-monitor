@@ -19,7 +19,7 @@ $month = (int)($_GET['month'] ?? $now->format('n'));
 $threshold1 = (int)($_GET['t1'] ?? 25);
 $threshold2 = (int)($_GET['t2'] ?? 50);
 $mode = $_GET['mode'] ?? 'denni'; // denni | mesicni
-if (!in_array($mode, ['denni', 'mesicni'], true)) $mode = 'denni';
+if (!in_array($mode, ['denni', 'mesicni', 'vlastni'], true)) $mode = 'denni';
 
 $year = max(2024, min(2030, $year));
 $month = max(1, min(12, $month));
@@ -104,8 +104,10 @@ for ($d = 1; $d <= $daysInMonth; $d++) {
         $deviationPct = ($avgProd > 0) ? (($prod - $avgProd) / $avgProd) * 100 : 0;
 
         $status = 'ok';
-        if (abs($deviationPct) > $threshold2) $status = 'bad';
-        elseif (abs($deviationPct) > $threshold1) $status = 'warn';
+        if ($deviationPct > $threshold2)        $status = 'bad-pos';     // hodně NAD průměrem (modrá)
+        elseif ($deviationPct > $threshold1)    $status = 'warn-pos';    // mírně NAD (modřejší)
+        elseif ($deviationPct < -$threshold2)   $status = 'bad';         // hodně POD (červená)
+        elseif ($deviationPct < -$threshold1)   $status = 'warn';        // mírně POD (oranžová)
 
         $grid[$d][$pid] = [
             'kwh' => $kwh,
@@ -188,9 +190,11 @@ $months = ['leden','únor','březen','duben','květen','červen','červenec','sr
 .comparison-table th div { text-transform: none; font-size: 0.72rem; opacity: 0.85; }
 .comparison-table th.day-col { text-align: left; min-width: 50px; position: sticky; left: 0; z-index: 4; }
 .comparison-table td.day-cell { background: var(--surface-2); font-weight: 600; text-align: left; position: sticky; left: 0; color: var(--text-dim); z-index: 1; }
-.cell-ok    { background: rgba(63, 185, 80, 0.30); color: var(--text); }
-.cell-warn  { background: rgba(245, 184, 0, 0.32); color: var(--text); }
-.cell-bad   { background: rgba(248, 81, 73, 0.30); color: var(--text); }
+.cell-ok       { background: rgba(63, 185, 80, 0.30); color: var(--text); }
+.cell-warn     { background: rgba(245, 184, 0, 0.32); color: var(--text); }
+.cell-bad      { background: rgba(248, 81, 73, 0.30); color: var(--text); }
+.cell-warn-pos { background: rgba(125, 145, 175, 0.28); color: var(--text); }
+.cell-bad-pos  { background: rgba(56, 139, 253, 0.45); color: var(--text); }
 .cell-nodata { color: var(--text-dim); background: var(--surface); }
 .cell-kwh { font-weight: 700; font-size: 1rem; color: var(--text); }
 .unit-suffix { font-size: 0.65rem; opacity: 0.55; font-weight: 500; margin-left: 2px; }
@@ -336,9 +340,13 @@ window.toggleAll = function(check) {
             Pro každý den se spočítá průměr productivity (kWh/kWp) ze všech vybraných FVE které měly v ten den data.
             <strong>Odchylka v buňce</strong> = jak FVE ten den vyrobila vůči tomu dennímu průměru.<br>
             <em>Výhoda: spravedlivé i v zataženém dni (všechny FVE měřené stejným počasím).</em>
-        <?php else: ?>
-            Spočítá se měsíční průměr (= průměr ze všech denních průměrů). Každá buňka pak ukazuje, jak FVE ten den vyrobila vůči <strong>celoměsíčnímu průměru</strong>.<br>
+        <?php elseif ($mode === 'mesicni'): ?>
+            Spočítá se měsíční průměr (= průměr ze všech denních průměrů). Každá buňka pak ukazuje, jak FVE ten den vyrobila vůči <strong>celoměsíčnímu průměru všech vybraných FVE</strong>.<br>
             <em>Výhoda: vidíš odchylky způsobené nejen výkonem FVE ale i počasím (ten den slunečno/zataženo).</em>
+        <?php else: ?>
+            Pro každou FVE se spočítá <strong>vlastní měsíční průměr</strong> (její denní productivity přes celý měsíc).
+            Každá buňka pak ukazuje, jak FVE ten den vyrobila vůči <strong>svému vlastnímu měsíčnímu průměru</strong>.<br>
+            <em>Výhoda: detekce anomálií u jednotlivé FVE — když má den horší/lepší než její vlastní normál (závada, ideální počasí, omezení atd.).</em>
         <?php endif; ?>
         <br>
         <strong>Spodní řádek tabulky</strong> ukazuje měsíční productivity každé FVE — užitečné pro identifikaci dlouhodobých problémů (zaprášené panely, stín, závada).
@@ -380,8 +388,9 @@ window.toggleAll = function(check) {
 
         <label style="margin-left:1rem">📐 Režim:</label>
         <select name="mode">
-            <option value="denni" <?= $mode === 'denni' ? 'selected' : '' ?>>Denní průměr (per den)</option>
-            <option value="mesicni" <?= $mode === 'mesicni' ? 'selected' : '' ?>>Měsíční průměr (za celý měsíc)</option>
+            <option value="denni" <?= $mode === 'denni' ? 'selected' : '' ?>>Denní průměr (proti dennímu Ø)</option>
+            <option value="mesicni" <?= $mode === 'mesicni' ? 'selected' : '' ?>>Měsíční průměr (proti měsíčnímu Ø všech)</option>
+            <option value="vlastni" <?= $mode === 'vlastni' ? 'selected' : '' ?>>Vlastní průměr FVE (proti sobě)</option>
         </select>
 
         <label style="margin-left:1rem">⚠️ Stupeň 1:</label>
@@ -414,9 +423,11 @@ window.toggleAll = function(check) {
 </form>
 
 <div class="legend">
-    <span class="legend-item"><span class="legend-swatch cell-ok"></span> Normál — odchylka do <?= $threshold1 ?>% od průměru</span>
-    <span class="legend-item"><span class="legend-swatch cell-warn"></span> 1. stupeň — <?= $threshold1 ?>% až <?= $threshold2 ?>% od průměru</span>
-    <span class="legend-item"><span class="legend-swatch cell-bad"></span> 2. stupeň — nad <?= $threshold2 ?>% od průměru</span>
+    <span class="legend-item"><span class="legend-swatch cell-bad"></span> 2. st. POD — méně −<?= $threshold2 ?>% od průměru</span>
+    <span class="legend-item"><span class="legend-swatch cell-warn"></span> 1. st. POD — −<?= $threshold1 ?>% až −<?= $threshold2 ?>%</span>
+    <span class="legend-item"><span class="legend-swatch cell-ok"></span> Normál — ±<?= $threshold1 ?>%</span>
+    <span class="legend-item"><span class="legend-swatch cell-warn-pos"></span> 1. st. NAD — +<?= $threshold1 ?>% až +<?= $threshold2 ?>%</span>
+    <span class="legend-item"><span class="legend-swatch cell-bad-pos"></span> 2. st. NAD — více +<?= $threshold2 ?>% od průměru</span>
     <span class="legend-item"><span class="legend-swatch cell-nodata" style="border:1px solid var(--border)"></span> Bez dat</span>
 </div>
 
@@ -428,13 +439,27 @@ window.toggleAll = function(check) {
         <thead>
             <tr>
                 <th class="day-col">Den</th>
-                <?php foreach ($plants as $p): ?>
+                <?php
+                $headerLabel = match($mode) {
+                    'mesicni' => 'měsíční Ø',
+                    'vlastni' => 'denní Ø všech',
+                    default   => 'denní Ø',
+                };
+                ?>
+                <th style="min-width:90px">Ø všech FVE<br><small style="font-weight:400;opacity:0.7;font-size:0.7rem"><?= $headerLabel ?> kWh/kWp/den</small></th>
+                <?php foreach ($plants as $p):
+                    $pStats = $plantProductivity[(int)$p['id']];
+                    $pAvg = $pStats['days'] > 0 ? $pStats['sum'] / $pStats['days'] : 0;
+                ?>
                     <th>
                         <?= htmlspecialchars($p['name']) ?>
                         <div style="font-size:0.7rem;font-weight:400;opacity:0.7;margin-top:2px">
                             <?= number_format((float)$p['peak_power_kwp'], 0, ',', ' ') ?> kWp
                         </div>
-                        <div style="font-size:0.65rem;font-weight:400;opacity:0.55;margin-top:3px;font-style:italic">
+                        <div style="font-size:0.7rem;font-weight:600;color:var(--accent);margin-top:3px" title="Průměrná denní specifická výroba FVE za vybraný měsíc (=průměr ze všech denních productivit)">
+                            Ø <?= number_format($pAvg, 3, ',', '') ?> kWh/kWp/měsíc
+                        </div>
+                        <div style="font-size:0.65rem;font-weight:400;opacity:0.55;margin-top:2px;font-style:italic">
                             kWh denně<br>± % od průměru
                         </div>
                     </th>
@@ -442,9 +467,20 @@ window.toggleAll = function(check) {
             </tr>
         </thead>
         <tbody>
-            <?php for ($d = 1; $d <= $daysInMonth; $d++): ?>
+            <?php for ($d = 1; $d <= $daysInMonth; $d++):
+                $dayAvg = $dailyAverages[$d] ?? null;
+            ?>
                 <tr>
                     <td class="day-cell"><?= sprintf('%02d.%02d.', $d, $month) ?></td>
+                    <td style="text-align:center;background:var(--surface-2);font-family:monospace;font-size:0.85rem;color:<?= $dayAvg ? 'var(--accent)' : 'var(--text-dim)' ?>">
+                        <?php if ($mode === 'mesicni'): ?>
+                            <?= number_format($monthlyBenchmark, 3, ',', '') ?>
+                        <?php elseif ($dayAvg !== null): ?>
+                            <?= number_format($dayAvg, 3, ',', '') ?>
+                        <?php else: ?>
+                            —
+                        <?php endif; ?>
+                    </td>
                     <?php foreach ($plants as $p):
                         $pid = (int)$p['id'];
                         $cell = $grid[$d][$pid] ?? null;
@@ -455,16 +491,25 @@ window.toggleAll = function(check) {
                             if ($mode === 'mesicni') {
                                 $benchmark = $monthlyBenchmark;
                                 $devPct = ($benchmark > 0) ? (($cell['productivity'] - $benchmark) / $benchmark) * 100 : 0;
-                                $tipPrefix = 'Měsíční průměr: ';
+                                $tipPrefix = 'Měsíční Ø všech: ';
+                            } elseif ($mode === 'vlastni') {
+                                // Měsíční průměr TÉTO FVE (její vlastní)
+                                $pStats = $plantProductivity[$pid];
+                                $ownAvg = $pStats['days'] > 0 ? $pStats['sum'] / $pStats['days'] : 0;
+                                $benchmark = $ownAvg;
+                                $devPct = ($benchmark > 0) ? (($cell['productivity'] - $benchmark) / $benchmark) * 100 : 0;
+                                $tipPrefix = 'Vlastní měsíční Ø: ';
                             } else {
                                 $benchmark = $cell['avg'];
                                 $devPct = $cell['deviation_pct'];
-                                $tipPrefix = 'Denní průměr ('  . sprintf('%02d.%02d.', $d, $month) . '): ';
+                                $tipPrefix = 'Denní Ø všech (' . sprintf('%02d.%02d.', $d, $month) . '): ';
                             }
-                            // Klasifikace podle prahů
+                            // Klasifikace podle prahů (záporné = pod průměrem, kladné = nad)
                             $cls = 'cell-ok';
-                            if (abs($devPct) > $threshold2) $cls = 'cell-bad';
-                            elseif (abs($devPct) > $threshold1) $cls = 'cell-warn';
+                            if ($devPct > $threshold2)        $cls = 'cell-bad-pos';
+                            elseif ($devPct > $threshold1)    $cls = 'cell-warn-pos';
+                            elseif ($devPct < -$threshold2)   $cls = 'cell-bad';
+                            elseif ($devPct < -$threshold1)   $cls = 'cell-warn';
                         ?>
                             <td class="<?= $cls ?> clickable"
                                 title="Klikni pro detail · <?= $tipPrefix ?><?= number_format($benchmark, 3) ?> kWh/kWp · Odchylka: <?= ($devPct >= 0 ? '+' : '') . number_format($devPct, 1) ?>%"
@@ -494,6 +539,10 @@ window.toggleAll = function(check) {
         <tfoot>
             <tr>
                 <td class="day-cell">Σ Celkem</td>
+                <td style="background:var(--surface-2);text-align:center;font-family:monospace;color:var(--accent);font-weight:700">
+                    <?= number_format($monthlyBenchmark, 3, ',', '') ?>
+                    <div style="font-size:0.65rem;opacity:0.6;font-weight:400">kWh/kWp/den</div>
+                </td>
                 <?php foreach ($plants as $p): ?>
                     <td>
                         <span class="cell-kwh"><?= number_format($plantTotals[(int)$p['id']], 0, ',', ' ') ?> <span class="unit-suffix">kWh</span></span>
@@ -502,9 +551,12 @@ window.toggleAll = function(check) {
                 <?php endforeach; ?>
             </tr>
             <tr>
-                <td class="day-cell" title="Průměrná specifická výroba kWh na 1 kWp instalovaného výkonu">
+                <td class="day-cell" title="Průměrná denní specifická výroba: kWh vyrobených na 1 kWp instalovaného výkonu za den">
                     Ø productivity
-                    <div style="font-size:0.7rem;font-weight:400;opacity:0.7">kWh/kWp</div>
+                    <div style="font-size:0.7rem;font-weight:400;opacity:0.7">kWh/kWp/den</div>
+                </td>
+                <td style="background:var(--surface-2);text-align:center;font-family:monospace;color:var(--accent);font-weight:700">
+                    —
                 </td>
                 <?php
                 // Měsíční průměr = průměr denních průměrů (= správný benchmark pro počasí)
@@ -515,8 +567,10 @@ window.toggleAll = function(check) {
                     $prod = $stats['days'] > 0 ? $stats['sum'] / $stats['days'] : 0;
                     $devPct = $monthlyAvg > 0 ? (($prod - $monthlyAvg) / $monthlyAvg) * 100 : 0;
                     $cls = 'cell-ok';
-                    if (abs($devPct) > $threshold2) $cls = 'cell-bad';
-                    elseif (abs($devPct) > $threshold1) $cls = 'cell-warn';
+                    if ($devPct > $threshold2)        $cls = 'cell-bad-pos';
+                    elseif ($devPct > $threshold1)    $cls = 'cell-warn-pos';
+                    elseif ($devPct < -$threshold2)   $cls = 'cell-bad';
+                    elseif ($devPct < -$threshold1)   $cls = 'cell-warn';
                     $tip = sprintf(
                         'Tato FVE: %s kWh/kWp (%d dn\xC5\xAF) · M\xC4\x9Bs\xC3\xADc\xC5\x88n\xC3\xAD pr\xC5\xAFm\xC4\x9Br: %s kWh/kWp · Odchylka: %s%%',
                         number_format($prod, 3),
@@ -526,7 +580,7 @@ window.toggleAll = function(check) {
                     );
                 ?>
                     <td class="<?= $cls ?>" title="<?= htmlspecialchars($tip) ?>">
-                        <span class="cell-kwh"><?= number_format($prod, 3, ',', '') ?> <span class="unit-suffix">kWh/kWp</span></span>
+                        <span class="cell-kwh"><?= number_format($prod, 3, ',', '') ?> <span class="unit-suffix">kWh/kWp/den</span></span>
                         <span class="cell-pct">
                             <?= ($devPct >= 0 ? '+' : '') . number_format($devPct, 1, ',', '') ?> % od Ø
                         </span>
