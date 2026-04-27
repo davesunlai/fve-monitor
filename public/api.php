@@ -34,6 +34,7 @@ try {
         'ack'      => actionAck((int) ($_GET['id'] ?? 0)),
         'sparkline'=> actionSparkline(),
         'range'    => actionRange($plantId ?? 0, (int) ($_GET['hours'] ?? 48)),
+        'day_realtime' => actionDayRealtime($plantId ?? 0, $_GET['date'] ?? date('Y-m-d')),
         'vapid_key'     => actionVapidKey(),
         'push_subscribe'=> actionPushSubscribe(),
         'push_test'     => actionPushTest((int) ($_GET['id'] ?? 0)),
@@ -407,4 +408,70 @@ function actionPasskeyDelete(int $credId): array
     $ok = \FveMonitor\Lib\Passkey::deleteCredential($credId, (int) $user['id']);
 
     return ['ok' => $ok];
+}
+
+/**
+ * 15min data za daný den pro vybranou FVE
+ */
+function actionDayRealtime(int $plantId, string $date): array
+{
+    if ($plantId <= 0) return ['error' => 'plant required'];
+
+    // Validace data
+    $dt = DateTimeImmutable::createFromFormat('Y-m-d', $date);
+    if (!$dt) return ['error' => 'invalid date'];
+
+    $dayStart = $dt->format('Y-m-d 00:00:00');
+    $dayEnd   = $dt->format('Y-m-d 23:59:59');
+
+    $rows = \FveMonitor\Lib\Database::all(
+        "SELECT ts, power_kw, energy_kwh
+         FROM production_realtime
+         WHERE plant_id = ? AND ts BETWEEN ? AND ?
+         ORDER BY ts ASC",
+        [$plantId, $dayStart, $dayEnd]
+    );
+
+    if (empty($rows)) {
+        return [
+            'plant_id' => $plantId,
+            'date'     => $date,
+            'has_data' => false,
+            'message'  => '15-minutová data nejsou pro tento den k dispozici',
+        ];
+    }
+
+    // Zpracuj data
+    $points = [];
+    $firstEnergy = (float) $rows[0]['energy_kwh'];
+    $maxPower = 0;
+    $totalEnergyDelta = 0;
+
+    foreach ($rows as $r) {
+        $power = (float) $r['power_kw'];
+        $energy = (float) $r['energy_kwh'];
+        if ($power > $maxPower) $maxPower = $power;
+
+        $points[] = [
+            'time'   => substr($r['ts'], 11, 5), // "HH:MM"
+            'ts'     => $r['ts'],
+            'power_kw' => $power,
+            'energy_kwh' => $energy,
+        ];
+    }
+
+    $lastEnergy = (float) end($rows)['energy_kwh'];
+    $dailyEnergyKwh = $lastEnergy - $firstEnergy;
+
+    return [
+        'plant_id'    => $plantId,
+        'date'        => $date,
+        'has_data'    => true,
+        'records'     => count($points),
+        'max_power_kw' => round($maxPower, 1),
+        'daily_energy_kwh' => round($dailyEnergyKwh, 1),
+        'first_time'  => $points[0]['time'] ?? null,
+        'last_time'   => end($points)['time'] ?? null,
+        'points'      => $points,
+    ];
 }

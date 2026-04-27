@@ -27,10 +27,11 @@ $plants = Database::all('SELECT id, code FROM plants WHERE is_active = 1');
 $predictor = new Predictor();
 
 foreach ($plants as $plant) {
+    // Vyber jen záznamy s reálnou výrobou (power_kw >= 1 kW) - vyřazuje noční anomálie i šum < 1 kW
     $stats = Database::one(
         'SELECT MAX(energy_kwh) AS energy, MAX(power_kw) AS peak
          FROM production_realtime
-         WHERE plant_id = ? AND DATE(ts) = ?',
+         WHERE plant_id = ? AND DATE(ts) = ? AND power_kw >= 1',
         [$plant['id'], $today]
     );
 

@@ -615,12 +615,66 @@ window.showDayDetail = function(td) {
             <div class="modal-row"><span class="label">Odchylka</span><span class="value" style="color: var(--${classifyDev(monthDev)})">${sign(monthDev)}${fmt(monthDev, 1)} %</span></div>
         </div>
 
-        <div class="modal-section" style="opacity:0.6;font-size:0.82rem;font-style:italic">
-            💡 Pozn.: 15-minutový graf výkonu bude v jedné z dalších verzí.
+        <div class="modal-section" id="realtime-section">
+            <!-- Vyplní se ajaxem -->
         </div>
     `;
     document.getElementById('day-modal').classList.add('open');
+
+    // Načti 15min data ze serveru
+    fetchDayRealtime(parseInt(data.plantId, 10), `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`);
 };
+
+async function fetchDayRealtime(plantId, dateStr) {
+    const placeholder = document.getElementById('realtime-section');
+    if (!placeholder) return;
+    placeholder.innerHTML = '<div style="opacity:0.6;text-align:center;padding:1rem">Načítám 15min data...</div>';
+
+    try {
+        const r = await fetch(`/api.php?action=day_realtime&plant=${plantId}&date=${dateStr}`);
+        const data = await r.json();
+
+        if (!data.has_data) {
+            placeholder.innerHTML = `
+                <h3>📊 15-minutová data</h3>
+                <div style="opacity:0.6;font-style:italic;padding:0.75rem;background:var(--surface-2);border-radius:4px;text-align:center">
+                    Pro tento den nejsou 15-minutová data k dispozici (importovaná z CSV).
+                </div>
+            `;
+            return;
+        }
+
+        const rows = data.points.map(p => `
+            <tr>
+                <td style="padding:4px 8px;border-bottom:1px solid var(--border);font-family:monospace">${p.time}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid var(--border);text-align:right;font-family:monospace">${p.power_kw.toFixed(1)} kW</td>
+                <td style="padding:4px 8px;border-bottom:1px solid var(--border);text-align:right;font-family:monospace;opacity:0.7">${p.energy_kwh.toFixed(1)} kWh</td>
+            </tr>
+        `).join('');
+
+        placeholder.innerHTML = `
+            <h3>📊 15-minutová data (${data.records} záznamů)</h3>
+            <div style="font-size:0.82rem;color:var(--text-dim);margin-bottom:8px">
+                Špička výkonu: <strong style="color:var(--accent)">${data.max_power_kw.toFixed(1)} kW</strong>
+                · První: ${data.first_time} · Poslední: ${data.last_time}
+            </div>
+            <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;background:var(--surface-2)">
+                <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+                    <thead style="position:sticky;top:0;background:var(--surface);z-index:1">
+                        <tr>
+                            <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border);color:var(--text-dim);font-size:0.72rem;text-transform:uppercase">Čas</th>
+                            <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border);color:var(--text-dim);font-size:0.72rem;text-transform:uppercase">Výkon</th>
+                            <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border);color:var(--text-dim);font-size:0.72rem;text-transform:uppercase">Kumulativní E</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+    } catch (e) {
+        placeholder.innerHTML = `<div style="color:var(--bad)">Chyba načítání: ${e.message}</div>`;
+    }
+}
 
 window.closeDayModal = function(event) {
     if (event && event.target.id !== 'day-modal' && event.target.className !== 'day-modal-close') return;
