@@ -5,19 +5,40 @@
 const API = 'api.php';
 const REFRESH_MS = 60_000;
 
-// Načti aktuální update message ze serveru (pro toast)
-fetch('/version.json?t=' + Date.now(), { cache: 'no-store' })
-    .then(r => r.ok ? r.json() : null)
-    .then(d => { if (d && d.message) window.UPDATE_MESSAGE = d.message; })
-    .catch(() => {});
-
-// Refresh každých 5 minut (pro případ že server změní message zatímco je tab otevřený)
-setInterval(() => {
-    fetch('/version.json?t=' + Date.now(), { cache: 'no-store' })
+// Načti aktuální verzi + update message ze serveru
+function refreshVersionInfo() {
+    return fetch('/version.json?t=' + Date.now(), { cache: 'no-store' })
         .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d && d.message) window.UPDATE_MESSAGE = d.message; })
+        .then(d => {
+            if (!d) return;
+            if (d.message) window.UPDATE_MESSAGE = d.message;
+            if (d.version) {
+                window.APP_VERSION = d.version;
+                renderVersionFooter(d.version);
+            }
+        })
         .catch(() => {});
-}, 5 * 60 * 1000);
+}
+
+function renderVersionFooter(version) {
+    let footer = document.getElementById('app-version-footer');
+    if (!footer) {
+        footer = document.createElement('div');
+        footer.id = 'app-version-footer';
+        footer.style.cssText = `
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            padding: 1rem 0 1.5rem 0;
+            opacity: 0.7;
+        `;
+        document.body.appendChild(footer);
+    }
+    footer.textContent = `FVE Monitor v${version}`;
+}
+
+refreshVersionInfo();
+setInterval(refreshVersionInfo, 5 * 60 * 1000);
 
 
 let chartRealtime = null;

@@ -161,3 +161,8 @@ self.addEventListener('message', event => {
 // Deploy update message preload: 1777258481
 // Deploy v4.9: 1777258735
 // v5.0: Mon Apr 27 05:08:12 AM CEST 2026
+// Deploy version footer: 1777259644
+// v0.28: Mon Apr 27 05:16:09 AM CEST 2026
+// v0.28: Mon Apr 27 05:17:04 AM CEST 2026
+// v0.28: Mon Apr 27 05:17:24 AM CEST 2026
+// v0.28: Mon Apr 27 05:17:25 AM CEST 2026
