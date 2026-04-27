@@ -172,7 +172,7 @@ $currentUser = \FveMonitor\Lib\Auth::currentUser();
                 <canvas id="chart-yearly"></canvas>
                 <div id="yearly-table"></div>
             </div>
-            <div class="chart-wrap">
+            <div class="chart-wrap chart-wrap-fullwidth">
                 <h3>4denní průběh výkonu</h3>
                 <canvas id="chart-48h"></canvas>
             </div>

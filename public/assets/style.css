@@ -685,3 +685,9 @@ footer {
     border-color: var(--accent);
     font-weight: 600;
 }
+
+
+/* 4denní graf zabírá celou šířku detail-body gridu */
+.chart-wrap.chart-wrap-fullwidth {
+    grid-column: 1 / -1;
+}
