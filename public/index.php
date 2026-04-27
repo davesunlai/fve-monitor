@@ -68,6 +68,10 @@ $currentUser = \FveMonitor\Lib\Auth::currentUser();
             <span class="menu-icon">📋</span>
             <span class="menu-label">Historie alertů</span>
         </a>
+        <a href="comparison.php" class="menu-item">
+            <span class="menu-icon">📊</span>
+            <span>Denní srovnání FVE</span>
+        </a>
 
         <?php if ($currentUser): ?>
         <a href="admin/profile.php" class="menu-item">
