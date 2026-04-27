@@ -173,3 +173,9 @@ self.addEventListener('message', event => {
 // Deploy comparison style v0.33: 1777262820
 // Deploy comparison labels v0.34: 1777263159
 // Deploy comparison clarity v0.35: 1777263263
+// Deploy productivity row v0.36: 1777263685
+// Deploy comparison correct averages v0.37: 1777265213
+// Deploy mode switcher v0.38: 1777265436
+// Deploy benchmark display v0.39: 1777265708
+// Deploy day modal v0.40: 1777266348
+// Deploy modal complete v0.41: 1777266420
