@@ -152,3 +152,12 @@ self.addEventListener('message', event => {
 // Deploy year persist: 1777174938
 // Deploy yearly table fix: 1777175514
 // Deploy yearly table fix v2: 1777175644
+// Deploy custom toast helper: 1777256661
+// Deploy versioned toast: 1777257221
+// Deploy v4.8: 1777257292
+// Deploy version test: 1777257692
+// Deploy: Mon Apr 27 04:45:25 AM CEST 2026
+// Deploy: Mon Apr 27 04:46:22 AM CEST 2026
+// Deploy update message preload: 1777258481
+// Deploy v4.9: 1777258735
+// v5.0: Mon Apr 27 05:08:12 AM CEST 2026

@@ -5,6 +5,21 @@
 const API = 'api.php';
 const REFRESH_MS = 60_000;
 
+// Načti aktuální update message ze serveru (pro toast)
+fetch('/version.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : null)
+    .then(d => { if (d && d.message) window.UPDATE_MESSAGE = d.message; })
+    .catch(() => {});
+
+// Refresh každých 5 minut (pro případ že server změní message zatímco je tab otevřený)
+setInterval(() => {
+    fetch('/version.json?t=' + Date.now(), { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && d.message) window.UPDATE_MESSAGE = d.message; })
+        .catch(() => {});
+}, 5 * 60 * 1000);
+
+
 let chartRealtime = null;
 let chartYearly = null;
 let detailMap = null;
@@ -584,11 +599,14 @@ if ('serviceWorker' in navigator) {
 }
 
 function showUpdateToast(newSW) {
+    // Použij text z window.UPDATE_MESSAGE (načteno při startu) nebo fallback
+    const message = window.UPDATE_MESSAGE || '✨ Nová verze FVE Monitoru je k dispozici.';
+
     // Jednoduchý toast dole uprostřed obrazovky
     const toast = document.createElement('div');
     toast.id = 'update-toast';
     toast.innerHTML = `
-        <span>✨ Nová verze FVE Monitoru je k dispozici.</span>
+        <span>${message}</span>
         <button id="update-apply">Aktualizovat</button>
         <button id="update-dismiss" style="background:transparent;border:1px solid currentColor;margin-left:8px">Později</button>
     `;
@@ -835,3 +853,39 @@ async function loadYearForChart(year) {
         console.error('Chyba načítání roku:', e);
     }
 }
+
+
+// ───────── Debug toast (pro ruční volání z konzole) ─────────
+// Použití v konzoli: showCustomToast("Nové verze 4.8 - klikni na aktualizaci")
+window.showCustomToast = function(text) {
+    // Pokud už toast je, nahraď ho
+    const old = document.getElementById('update-toast');
+    if (old) old.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'update-toast';
+    toast.innerHTML = `
+        <span>${text}</span>
+        <button id="update-apply">Aktualizovat</button>
+        <button id="update-dismiss" style="background:transparent;border:1px solid currentColor;margin-left:8px">Později</button>
+    `;
+    toast.style.cssText = `
+        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+        background: var(--accent, #f5b800); color: #000;
+        padding: 12px 20px; border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        display: flex; align-items: center; gap: 12px;
+        z-index: 9999; font-size: 0.9rem; max-width: 90vw;
+    `;
+    toast.querySelector('#update-apply').style.cssText = `
+        background: #000; color: var(--accent, #f5b800);
+        border: none; padding: 6px 14px; border-radius: 4px;
+        font-weight: 600; cursor: pointer;
+    `;
+    document.body.appendChild(toast);
+
+    toast.querySelector('#update-apply').onclick = () => {
+        location.reload();
+    };
+    toast.querySelector('#update-dismiss').onclick = () => toast.remove();
+};
