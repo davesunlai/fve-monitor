@@ -188,7 +188,40 @@ $plants = Database::all(
             border: 1px solid var(--border);
             border-radius: 6px;
         }
-    </style>
+    
+/* Sticky první sloupec (Elektrárna) v obou tabulkách */
+.ote-table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+.ote-table th:first-child,
+.ote-table td:first-child {
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+    z-index: 2;
+    border-right: 2px solid var(--accent);
+    min-width: 180px;
+    max-width: 220px;
+}
+.ote-table thead th:first-child {
+    background: var(--surface-2);
+    z-index: 3;
+}
+.ote-table tbody tr:hover td:first-child {
+    background: var(--surface-2);
+}
+.ote-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    max-width: 100%;
+}
+.ote-table-wrap .ote-table {
+    margin-bottom: 0;
+}
+</style>
 </head>
 <body>
 <header class="topbar">
@@ -227,7 +260,7 @@ $plants = Database::all(
 
     <form method="post">
         <div class="tab-pane active" data-pane="ids"><div class="table-scroll">
-        <table class="ote-table">
+        <div class="ote-table-wrap"><table class="ote-table">
             <thead>
                 <tr>
                     <th>Elektrárna</th>
@@ -330,7 +363,7 @@ $plants = Database::all(
                     </tr>
                 <?php endforeach; ?>
             </tbody>
-        </table>
+        </table></div>
         </div>
 
         </div><!-- /tab-pane ids -->
@@ -338,7 +371,7 @@ $plants = Database::all(
         <!-- Panel: Adresa & katastr -->
         <div class="tab-pane" data-pane="address" style="display:none">
             <div class="table-scroll">
-            <table class="ote-table">
+            <div class="ote-table-wrap"><table class="ote-table">
                 <thead>
                     <tr>
                         <th>Elektrárna</th>
@@ -408,7 +441,7 @@ $plants = Database::all(
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
-            </table>
+            </table></div>
             </div>
         </div><!-- /tab-pane address -->
 
