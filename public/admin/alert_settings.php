@@ -215,6 +215,7 @@ foreach ($plants as $p) {
                                 <button type="button" class="preset-btn" onclick="setThreshold(<?= $p['id'] ?>, 0.50)">50%</button>
                                 <button type="button" class="preset-btn" onclick="setThreshold(<?= $p['id'] ?>, 0.70)">70%</button>
                                 <button type="button" class="preset-btn" onclick="setThreshold(<?= $p['id'] ?>, 0.90)">90%</button>
+                                <button type="button" class="preset-btn test-btn" onclick="testAlert(<?= $p['id'] ?>, '<?= htmlspecialchars($p['name'], ENT_QUOTES) ?>')" style="margin-left:10px;border-color:var(--accent);color:var(--accent)">▶️ Test</button>
                             </div>
                         </td>
                     </tr>
@@ -252,5 +253,123 @@ document.querySelectorAll('.threshold-input').forEach(inp => {
     });
 });
 </script>
+
+<!-- Modal pro test alert -->
+<div id="test-modal" onclick="closeTestModal(event)" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;padding:1rem">
+    <div onclick="event.stopPropagation()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;max-width:700px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.5)">
+        <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface-2);border-radius:8px 8px 0 0">
+            <h2 id="test-modal-title" style="margin:0;font-size:1.1rem;color:var(--accent)">Test underperform alertu</h2>
+            <button onclick="closeTestModal()" style="background:transparent;border:none;color:var(--text);font-size:1.5rem;cursor:pointer;padding:0 6px;line-height:1">×</button>
+        </div>
+        <div id="test-modal-body" style="padding:1.25rem"></div>
+    </div>
+</div>
+
+<script>
+async function testAlert(plantId, plantName) {
+    const modal = document.getElementById('test-modal');
+    const title = document.getElementById('test-modal-title');
+    const body = document.getElementById('test-modal-body');
+
+    title.textContent = `Test alertu · ${plantName}`;
+    body.innerHTML = '<div style="text-align:center;padding:1.5rem;opacity:0.7">Načítám...</div>';
+    modal.style.display = 'flex';
+
+    try {
+        const r = await fetch(`/api.php?action=test_alert&plant=${plantId}`);
+        const d = await r.json();
+
+        if (d.error) {
+            body.innerHTML = `<div style="color:var(--bad)">⚠️ ${d.error}</div>`;
+            return;
+        }
+
+        const ratioPct = (d.ratio * 100).toFixed(1);
+        const thresholdPct = (d.threshold * 100).toFixed(0);
+        const wouldAlert = d.would_alert;
+        const severity = d.severity;
+        const sevColor = severity === 'critical' ? 'var(--bad)' : 'var(--warn)';
+
+        const verdict = wouldAlert
+            ? `<div style="background:rgba(248,81,73,0.15);border-left:3px solid ${sevColor};padding:14px;border-radius:4px;margin-bottom:1rem">
+                <strong style="color:${sevColor};font-size:1.05rem">⚠️ ALERT BY VZNIKL</strong> (severity: <strong>${severity}</strong>)<br>
+                <small style="opacity:0.85">Ratio ${ratioPct}% je pod thresholdem ${thresholdPct}%.</small>
+               </div>`
+            : `<div style="background:rgba(63,185,80,0.15);border-left:3px solid var(--good);padding:14px;border-radius:4px;margin-bottom:1rem">
+                <strong style="color:var(--good);font-size:1.05rem">✅ ALERT BY NEVZNIKL</strong><br>
+                <small style="opacity:0.85">Ratio ${ratioPct}% je nad thresholdem ${thresholdPct}%.</small>
+               </div>`;
+
+        const dayRows = d.per_day.map(day => {
+            const dayPct = (day.ratio * 100).toFixed(1);
+            const cls = day.ratio < d.threshold ? 'ratio-bad' : (day.ratio < 0.7 ? 'ratio-warn' : 'ratio-good');
+            return `
+                <tr>
+                    <td style="padding:6px 8px;border-bottom:1px solid var(--border);font-family:monospace">${day.day}</td>
+                    <td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;font-family:monospace">${day.actual.toFixed(1)} kWh</td>
+                    <td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;font-family:monospace;opacity:0.7">${day.expected.toFixed(1)} kWh</td>
+                    <td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;font-family:monospace">
+                        <span class="ratio-pill ${cls}">${dayPct}%</span>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        body.innerHTML = `
+            ${verdict}
+
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.75rem;margin-bottom:1rem">
+                <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:0.75rem">
+                    <div style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Reálná výroba</div>
+                    <div style="font-size:1.25rem;font-weight:700;font-family:monospace;color:var(--accent)">${d.actual.toLocaleString('cs-CZ')} <span style="font-size:0.7rem;opacity:0.65">kWh</span></div>
+                </div>
+                <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:0.75rem">
+                    <div style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">PVGIS očekávaná</div>
+                    <div style="font-size:1.25rem;font-weight:700;font-family:monospace">${d.expected.toLocaleString('cs-CZ')} <span style="font-size:0.7rem;opacity:0.65">kWh</span></div>
+                </div>
+                <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:0.75rem">
+                    <div style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Ratio (actual/PVGIS)</div>
+                    <div style="font-size:1.25rem;font-weight:700;font-family:monospace;color:${wouldAlert ? sevColor : 'var(--good)'}">${ratioPct} %</div>
+                </div>
+                <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:0.75rem">
+                    <div style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Threshold</div>
+                    <div style="font-size:1.25rem;font-weight:700;font-family:monospace">${thresholdPct} %</div>
+                </div>
+            </div>
+
+            <h3 style="font-size:0.95rem;color:var(--text);margin:1rem 0 0.5rem 0;padding-bottom:4px;border-bottom:1px solid var(--border)">📅 Per-day breakdown (${d.days} dní)</h3>
+            <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+                <thead>
+                    <tr>
+                        <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border);color:var(--text-dim);font-size:0.72rem;text-transform:uppercase">Den</th>
+                        <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border);color:var(--text-dim);font-size:0.72rem;text-transform:uppercase">Reálná</th>
+                        <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border);color:var(--text-dim);font-size:0.72rem;text-transform:uppercase">PVGIS</th>
+                        <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border);color:var(--text-dim);font-size:0.72rem;text-transform:uppercase">Ratio</th>
+                    </tr>
+                </thead>
+                <tbody>${dayRows}</tbody>
+            </table>
+
+            <div style="margin-top:1rem;padding:10px 14px;background:var(--surface-2);border-radius:4px;font-size:0.82rem;color:var(--text-dim)">
+                💡 <em>Toto je <strong>simulace</strong> — žádný reálný alert nebyl vytvořen. Cron 23:55 zítra spustí stejnou logiku, ale s vytvořením alertu pokud ratio &lt; threshold.</em>
+            </div>
+        `;
+    } catch (e) {
+        body.innerHTML = `<div style="color:var(--bad)">Chyba: ${e.message}</div>`;
+    }
+}
+
+function closeTestModal(event) {
+    if (event && event.target.id !== 'test-modal') return;
+    document.getElementById('test-modal').style.display = 'none';
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        document.getElementById('test-modal').style.display = 'none';
+    }
+});
+</script>
+
 </body>
 </html>

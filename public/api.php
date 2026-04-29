@@ -35,6 +35,7 @@ try {
         'sparkline'=> actionSparkline(),
         'range'    => actionRange($plantId ?? 0, (int) ($_GET['hours'] ?? 48)),
         'day_realtime' => actionDayRealtime($plantId ?? 0, $_GET['date'] ?? date('Y-m-d')),
+        'test_alert'   => actionTestAlert($plantId ?? 0),
         'vapid_key'     => actionVapidKey(),
         'push_subscribe'=> actionPushSubscribe(),
         'push_test'     => actionPushTest((int) ($_GET['id'] ?? 0)),
@@ -474,4 +475,17 @@ function actionDayRealtime(int $plantId, string $date): array
         'last_time'   => end($points)['time'] ?? null,
         'points'      => $points,
     ];
+}
+
+/**
+ * Test underperform alert pro FVE - vrátí stats bez vytvoření alertu
+ */
+function actionTestAlert(int $plantId): array
+{
+    if ($plantId <= 0) return ['error' => 'plant required'];
+    $stats = (new \FveMonitor\Lib\Predictor())->computeAlertStats($plantId);
+    if ($stats === null) {
+        return ['error' => 'Málo dat - alespoň 1 den s daty potřebný'];
+    }
+    return $stats;
 }

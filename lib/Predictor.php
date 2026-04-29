@@ -177,6 +177,58 @@ class Predictor
         }
     }
 
+    /**
+     * Spočítá statistiky pro underperform alert BEZ side-efektů.
+     * Vrátí null pokud málo dat. Jinak: ratio, actual, expected, threshold, would_alert, days, severity, per_day.
+     */
+    public function computeAlertStats(int $plantId): ?array
+    {
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('Europe/Prague'));
+        $weekAgo = $now->modify('-7 days');
+        $cached = (new PVGIS())->loadCachedForPlant($plantId);
+        $rows = Database::all(
+            'SELECT day, energy_kwh FROM production_daily
+             WHERE plant_id = ? AND day BETWEEN ? AND ?',
+            [$plantId, $weekAgo->format('Y-m-d'), $now->format('Y-m-d')]
+        );
+        if (count($rows) < 1) return null;
+
+        $actualSum = 0; $expectedSum = 0;
+        $perDay = [];
+        foreach ($rows as $r) {
+            $month = (int) (new \DateTimeImmutable($r['day']))->format('n');
+            $eM    = (float) ($cached[$month]['e_m_kwh'] ?? 0);
+            $daysInMonth = (int) (new \DateTimeImmutable($r['day']))->format('t');
+            $dayExpected = $eM / $daysInMonth;
+            $dayActual   = (float) $r['energy_kwh'];
+            $expectedSum += $dayExpected;
+            $actualSum   += $dayActual;
+            $perDay[] = [
+                'day'      => $r['day'],
+                'actual'   => round($dayActual, 1),
+                'expected' => round($dayExpected, 1),
+                'ratio'    => $dayExpected > 0 ? round($dayActual / $dayExpected, 3) : 0,
+            ];
+        }
+        if ($expectedSum <= 0) return null;
+
+        $ratio = $actualSum / $expectedSum;
+        $plantRow = Database::one('SELECT underperform_threshold FROM plants WHERE id = ?', [$plantId]);
+        $threshold = $plantRow ? (float) $plantRow['underperform_threshold'] : $this->threshold;
+
+        return [
+            'plant_id'    => $plantId,
+            'ratio'       => round($ratio, 3),
+            'actual'      => round($actualSum, 1),
+            'expected'    => round($expectedSum, 1),
+            'threshold'   => $threshold,
+            'days'        => count($rows),
+            'would_alert' => $ratio < $threshold,
+            'severity'    => $ratio < 0.4 ? 'critical' : 'warning',
+            'per_day'     => $perDay,
+        ];
+    }
+
     private function statusFromRatio(float $r): string
     {
         if ($r >= 0.95) return 'on_track';
