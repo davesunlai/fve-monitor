@@ -346,7 +346,7 @@ $plants = Database::all(
                         <td>
                             <select name="plants[<?= $p['id'] ?>][distributor]">
                                 <option value="">—</option>
-                                <?php foreach (['EG.D', 'CEZ', 'PRE'] as $d): ?>
+                                <?php foreach (['EG.D', 'CEZ', 'PRE', 'Teplárna Zlín'] as $d): ?>
                                     <option value="<?= $d ?>" <?= ($p['distributor'] ?? '') === $d ? 'selected' : '' ?>>
                                         <?= $d ?>
                                     </option>
@@ -375,15 +375,15 @@ $plants = Database::all(
                 <thead>
                     <tr>
                         <th>Elektrárna</th>
-                        <th style="min-width:80px">Evid. č.</th>
-                        <th style="min-width:200px">Ulice + č.p.</th>
-                        <th style="min-width:140px">Město</th>
-                        <th style="min-width:80px">PSČ</th>
-                        <th style="min-width:140px">Okres</th>
-                        <th style="min-width:140px">Kraj</th>
-                        <th style="min-width:160px">Katastr. území</th>
-                        <th style="min-width:100px">Kód katastru</th>
-                        <th style="min-width:160px">Parcela(y)</th>
+                        <th style="min-width:80px">Evid. č.<br><small style="font-weight:400;color:var(--text-dim)">z licence ERÚ</small></th>
+                        <th style="min-width:200px">Ulice + č.p.<br><small style="font-weight:400;color:var(--text-dim)">např. Tovární 1234/56</small></th>
+                        <th style="min-width:140px">Město<br><small style="font-weight:400;color:var(--text-dim)">Plzeň</small></th>
+                        <th style="min-width:80px">PSČ<br><small style="font-weight:400;color:var(--text-dim)">301 00</small></th>
+                        <th style="min-width:140px">Okres<br><small style="font-weight:400;color:var(--text-dim)">Plzeň-město</small></th>
+                        <th style="min-width:140px">Kraj<br><small style="font-weight:400;color:var(--text-dim)">Plzeňský</small></th>
+                        <th style="min-width:160px">Katastr. území<br><small style="font-weight:400;color:var(--text-dim)">Doubravka</small></th>
+                        <th style="min-width:100px">Kód katastru<br><small style="font-weight:400;color:var(--text-dim)">722634</small></th>
+                        <th style="min-width:160px">Parcela(y)<br><small style="font-weight:400;color:var(--text-dim)">12/3, 12/4</small></th>
                     </tr>
                 </thead>
                 <tbody>
