@@ -144,7 +144,12 @@ class Predictor
         if ($expectedSum <= 0) return;
 
         $ratio = $actualSum / $expectedSum;
-        if ($ratio < $this->threshold) {
+
+        // Per-FVE threshold z DB (fallback na globální config)
+        $plantRow = Database::one('SELECT underperform_threshold FROM plants WHERE id = ?', [$plantId]);
+        $threshold = $plantRow ? (float) $plantRow['underperform_threshold'] : $this->threshold;
+
+        if ($ratio < $threshold) {
             // Vlož pouze pokud podobný alert v posledních 24h neexistuje
             $exists = Database::one(
                 "SELECT id FROM alerts
