@@ -691,3 +691,10 @@ footer {
 .chart-wrap.chart-wrap-fullwidth {
     grid-column: 1 / -1;
 }
+
+/* Aktivní položka v hamburger menu */
+.menu-item-active {
+    background: rgba(245, 184, 0, 0.15) !important;
+    color: var(--accent) !important;
+    border-left: 3px solid var(--accent);
+}
