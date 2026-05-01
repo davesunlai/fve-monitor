@@ -424,12 +424,77 @@ function render48hChart(samples, weather = null, extendForecast = false) {
         });
     }
 
+    // Plugin: svislá čára "teď" + popisek
+    const nowLinePlugin = {
+        id: 'nowLine',
+        afterDraw(chart) {
+            const now = new Date();
+            const labels = chart.data.labels;
+            const days = ['Ne','Po','Út','St','Čt','Pá','So'];
+            const nowLabel = days[now.getDay()] + ' '
+                + String(now.getHours()).padStart(2,'0') + ':'
+                + String(now.getMinutes() < 30 ? '00' : '30');
+            // Najdi nejbližší index
+            let idx = -1, minDiff = Infinity;
+            labels.forEach((l, i) => {
+                // Porovnáme jen hodinu:minutu
+                const diff = Math.abs(labels.indexOf(l) - labels.indexOf(nowLabel));
+                // Jiný přístup: porovnej čas přímo
+                const parts = l.match(/(\d+):(\d+)/);
+                if (!parts) return;
+                // Projdeme allSamples přes chart metadata
+            });
+            // Lepší: projdeme labels a najdeme první budoucí
+            const nowTs = now.getTime();
+            idx = labels.findIndex((l, i) => {
+                // label = "Pá 14:15" — zkusíme zpětně dohledat ts z dat
+                // Jednodušší: hledáme přechod past→future v datech
+                const d = chart.data.datasets[0].data;
+                if (i === 0) return false;
+                return d[i-1] !== null && (d[i] === null || i === labels.length - 1);
+            });
+            // Fallback: hledej label odpovídající aktuálnímu času
+            if (idx < 0) {
+                const nowStr = days[now.getDay()] + ' '
+                    + String(now.getHours()).padStart(2,'0') + ':'
+                    + String(Math.floor(now.getMinutes()/15)*15).padStart(2,'0');
+                idx = labels.findIndex(l => l === nowStr);
+            }
+            if (idx < 0) return;
+
+            const xScale = chart.scales.x;
+            const yScale = chart.scales.y;
+            const x = xScale.getPixelForValue(idx);
+            const yTop = yScale.top;
+            const yBottom = yScale.bottom;
+            const {ctx} = chart;
+
+            ctx.save();
+            // Svislá čára
+            ctx.beginPath();
+            ctx.moveTo(x, yTop);
+            ctx.lineTo(x, yBottom);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Popisek "TEĎ"
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.font = '600 10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('TEĎ', x, yTop - 4);
+            ctx.restore();
+        }
+    };
+
     chart48h = new Chart(ctx, {
         type: 'line',
         data: {
             labels,
             datasets,
         },
+        plugins: [nowLinePlugin],
         options: {
             ...chartOptions('kW'),
             scales: {
