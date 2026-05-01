@@ -155,12 +155,14 @@ require __DIR__ . '/_app_head.php';
 .perf-table th {
     background: var(--surface-2);
     color: var(--text-dim);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
+    font-size: 0.78rem;
+    letter-spacing: 0.2px;
     font-weight: 700;
     text-align: center;
     white-space: nowrap;
+}
+.perf-table th small {
+    text-transform: lowercase;
 }
 .perf-table th.col-name, .perf-table td.col-name {
     text-align: left;

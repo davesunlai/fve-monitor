@@ -166,10 +166,11 @@ $months = ['leden','únor','březen','duben','květen','červen','červenec','sr
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>📊 Denní srovnání FVE</title>
-<link rel="stylesheet" href="assets/style.css">
+<?php
+$pageTitle = '📊 Denní srovnání FVE';
+$includeChart = false;
+require __DIR__ . '/_app_head.php';
+?>
 <style>
 .filter-bar { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
 .filter-row { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.75rem; }
@@ -319,13 +320,11 @@ window.toggleAll = function(check) {
 </head>
 <body>
 
-<header class="topbar">
-    <h1>📊 Denní srovnání FVE</h1>
-    <div style="margin-left:auto;color:var(--text-dim);font-size:0.85rem">
-        <a href="index.php" style="color:var(--text-dim)">← Dashboard</a>
-        · <?= htmlspecialchars($user['full_name'] ?? $user['username']) ?>
-    </div>
-</header>
+<?php
+$pageHeading = '📊 Denní srovnání FVE';
+$activePage = 'comparison';
+require __DIR__ . '/_topbar.php';
+?>
 
 <main>
 <div class="help-box">

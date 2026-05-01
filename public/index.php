@@ -14,95 +14,20 @@ $currentUser = \FveMonitor\Lib\Auth::currentUser();
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= htmlspecialchars($config['app']['name']) ?></title>
-    <link rel="stylesheet" href="assets/style.css">
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#f5b800">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="FVE Monitor">
-    <link rel="apple-touch-icon" href="assets/icon-192.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<?php
+$pageTitle = $config['app']['name'];
+$includeLeaflet = true;
+$includeChart = true;
+require __DIR__ . '/_app_head.php';
+?>
 </head>
 <body>
-<header class="topbar">
-    <h1>☀️ <?= htmlspecialchars($config['app']['name']) ?></h1>
-    <div class="topbar-meta">
-        <span id="last-update">—</span>
-        <span id="alert-badge" class="alert-badge hidden">0</span>
-
-        <!-- Hamburger tlačítko -->
-        <button id="menu-btn" class="menu-btn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">
-            <span></span><span></span><span></span>
-        </button>
-    </div>
-
-    <!-- Dropdown menu -->
-    <nav id="main-menu" class="main-menu hidden" aria-hidden="true">
-        <?php if ($currentUser): ?>
-            <div class="menu-user">
-                <div class="menu-user-name"><?= htmlspecialchars($currentUser['full_name'] ?? $currentUser['username']) ?></div>
-                <div class="menu-user-role"><?= htmlspecialchars($currentUser['role']) ?></div>
-            </div>
-            <div class="menu-sep"></div>
-        <?php endif; ?>
-
-        <button id="push-toggle" class="menu-item" style="display:none">
-            <span class="menu-icon">🔔</span>
-            <span class="menu-label">Zapnout notifikace</span>
-        </button>
-
-        <a href="admin/" class="menu-item">
-            <span class="menu-icon">⚙</span>
-            <span class="menu-label">Admin</span>
-        </a>
-
-        <a href="admin/alerts_history.php" class="menu-item">
-            <span class="menu-icon">📋</span>
-            <span class="menu-label">Historie alertů</span>
-        </a>
-        <a href="comparison.php" class="menu-item">
-            <span class="menu-icon">📊</span>
-            <span>Denní srovnání FVE</span>
-        </a>
-
-        <?php if ($currentUser): ?>
-        <a href="admin/profile.php" class="menu-item">
-            <span class="menu-icon">👤</span>
-            <span class="menu-label">Můj profil</span>
-        </a>
-        <?php endif; ?>
-
-        <a href="https://grafana.sunlai.org/" target="_blank" class="menu-item">
-            <span class="menu-icon">📊</span>
-            <span class="menu-label">Podrobné grafy</span>
-        </a>
-
-        <?php if ($currentUser): ?>
-            <div class="menu-sep"></div>
-            <a href="admin/logout.php" class="menu-item menu-item-danger">
-                <span class="menu-icon">🚪</span>
-                <span class="menu-label">Odhlásit</span>
-            </a>
-        <?php else: ?>
-            <div class="menu-sep"></div>
-            <a href="admin/login.php" class="menu-item">
-                <span class="menu-icon">🔐</span>
-                <span class="menu-label">Přihlásit se</span>
-            </a>
-        <?php endif; ?>
-    </nav>
-
-    <!-- Overlay na zavření kliknutím mimo -->
-    <div id="menu-overlay" class="menu-overlay hidden"></div>
-</header>
+<?php
+$pageHeading = '☀️ ' . $config['app']['name'];
+$activePage = 'dashboard';
+$showLiveStats = true;
+require __DIR__ . '/_topbar.php';
+?>
 
 <main>
     <!-- Souhrn nahoru -->
