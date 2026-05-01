@@ -197,3 +197,6 @@ self.addEventListener('message', event => {
 // Deploy test alert btn v0.57: 1777424617
 // Deploy headers v0.59: 1777426812
 // Deploy v0.61: 1777599752
+// Deploy yearly chart v0.62: 1777600162
+// Deploy month labels v0.62.1: 1777600379
+// Deploy yearly chart v0.62: 1777601040

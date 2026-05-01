@@ -98,6 +98,34 @@ if (!in_array((int)date('Y'), $years, true)) $years[] = (int)date('Y');
 sort($years);
 
 $months = ['','leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
+
+// Data pro roční graf - per měsíc per FVE plnění %
+$chartPlants = [];
+foreach ($plants as $p) {
+    $chartPlants[] = [
+        'id'    => (int)$p['id'],
+        'evid'  => $p['evid_number'] ?? '?',
+        'name'  => $p['name'],
+        'kwp'   => (float)$p['peak_power_kwp'],
+    ];
+}
+// Seřaď podle evid_number (1, 2, 3, ...)
+usort($chartPlants, fn($a, $b) => ($a['evid'] === '?' ? 99 : (int)$a['evid']) <=> ($b['evid'] === '?' ? 99 : (int)$b['evid']));
+
+// Pro každý měsíc 1-12: pole 9 FVE plnění % + 1 PVGIS (100)
+$chartData = [];
+$monthLabels = [];
+for ($m = 1; $m <= 12; $m++) {
+    $monthLabels[] = $months[$m];
+    $monthValues = [];
+    foreach ($chartPlants as $cp) {
+        $kwh = $monthlyData[$cp['id']][$m] ?? 0;
+        $pv  = $pvgisData[$cp['id']][$m] ?? 0;
+        $monthValues[] = $pv > 0 ? round(($kwh / $pv) * 100, 1) : null;
+    }
+    $monthValues[] = 100;
+    $chartData[] = $monthValues;
+}
 ?>
 <!DOCTYPE html>
 <html lang="cs">
@@ -329,6 +357,40 @@ require __DIR__ . '/_app_head.php';
         </table>
     </div>
 
+    <section style="margin-top:1.5rem">
+        <h2 style="margin:0 0 0.5rem 0;font-size:1.1rem;display:flex;align-items:center;gap:0.5rem">
+            📊 Roční graf plnění <small style="font-weight:400;opacity:0.65;font-size:0.85rem">— rok <?= $year ?></small>
+        </h2>
+        <p style="font-size:0.85rem;color:var(--text-dim);margin:0 0 1rem 0">
+            Pro každý měsíc 9 sloupců (FVE) + 1 referenční (P = PVGIS = 100%). Výška sloupce = % plnění predikce.
+        </p>
+
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:1rem;width:100%;overflow-x:auto">
+            <div style="position:relative;height:400px;width:100%">
+                <canvas id="yearly-chart"></canvas>
+            </div>
+            <div id="yearly-chart-months" style="display:flex;padding:8px 40px 4px 40px;font-size:0.88rem;font-weight:600;color:var(--accent);text-transform:capitalize">
+                <?php foreach ($monthLabels as $m): ?>
+                    <span style="flex:1;text-align:center"><?= htmlspecialchars($m) ?></span>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <div style="margin-top:0.75rem;padding:10px 14px;background:var(--surface-2);border-radius:4px;font-size:0.82rem">
+            <strong>Legenda:</strong>
+            <?php
+            $legendItems = [];
+            foreach ($chartPlants as $cp) {
+                if ($cp['evid'] !== '?') {
+                    $legendItems[] = '<strong style="color:var(--accent)">' . $cp['evid'] . '</strong> = ' . htmlspecialchars($cp['name']);
+                }
+            }
+            echo implode(' &middot; ', $legendItems);
+            ?>
+            &middot; <strong style="color:var(--accent)">P</strong> = PVGIS predikce (100%)
+        </div>
+    </section>
+
     <div style="margin-top:1rem;padding:10px 14px;background:var(--surface-2);border-radius:4px;font-size:0.82rem;color:var(--text-dim)">
         💡 Roční graf plnění (12 měsíců × 10 sloupců) bude přidán v další verzi.
     </div>
@@ -370,6 +432,96 @@ document.querySelectorAll('.sparkline-wrap').forEach(canvas => {
         ctx.fillRect(6 + i * (barW + gap), h - barH, barW, barH);
     });
 });
+</script>
+<script>
+// Roční graf plnění
+(function() {
+    const canvas = document.getElementById('yearly-chart');
+    if (!canvas) return;
+
+    const monthLabels = <?= json_encode($monthLabels) ?>;
+    const chartData = <?= json_encode($chartData) ?>;
+    const plantLabels = <?= json_encode(array_map(fn($p) => (string)$p['evid'], $chartPlants)) ?>;
+    const plantNames = <?= json_encode(array_map(fn($p) => $p['name'], $chartPlants)) ?>;
+
+    const colors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#fbbf24'];
+
+    const labels = [];
+    const values = [];
+    const bgColors = [];
+
+    monthLabels.forEach((monthName, mIdx) => {
+        const monthBars = chartData[mIdx];
+        plantLabels.forEach((evid, pIdx) => {
+            labels.push(evid);
+            values.push(monthBars[pIdx]);
+            bgColors.push(colors[pIdx]);
+        });
+        labels.push('P');
+        values.push(100);
+        bgColors.push(colors[9]);
+    });
+
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Plnění %',
+                data: values,
+                backgroundColor: bgColors,
+                borderWidth: 0,
+                barPercentage: 1.0,
+                categoryPercentage: 0.9,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: function(items) {
+                            const item = items[0];
+                            const idx = item.dataIndex;
+                            const monthIdx = Math.floor(idx / 10);
+                            const evid = item.label;
+                            const monthName = monthLabels[monthIdx].charAt(0).toUpperCase() + monthLabels[monthIdx].slice(1);
+                            const fveName = evid === 'P' ? 'PVGIS predikce' :
+                                            (plantNames[parseInt(evid) - 1] || 'Neznámá FVE');
+                            return `${monthName} · ${fveName} (${evid})`;
+                        },
+                        label: function(item) {
+                            const v = item.parsed.y;
+                            return v === null ? '' : `Plnění: ${v.toLocaleString('cs-CZ')} %`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    suggestedMax: 120,
+                    title: { display: true, text: 'Plnění [%]', color: 'rgba(255,255,255,0.6)' },
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: {
+                        callback: v => v + ' %',
+                        color: 'rgba(255,255,255,0.6)'
+                    }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        autoSkip: false,
+                        color: 'rgba(255,255,255,0.6)',
+                        font: { size: 10 }
+                    }
+                }
+            }
+        }
+    });
+})();
 </script>
 </body>
 </html>
