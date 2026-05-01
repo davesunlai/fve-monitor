@@ -45,6 +45,7 @@ try {
         'passkey_login_finish'    => actionPasskeyLoginFinish(),
         'passkey_list'            => actionPasskeyList(),
         'passkey_delete'          => actionPasskeyDelete((int) ($_GET['id'] ?? 0)),
+        'weather_prediction'      => actionWeatherPrediction((int) ($_GET['plant'] ?? 0)),
         default    => ['error' => 'Neznámá akce: ' . $action],
     };
     echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -488,4 +489,96 @@ function actionTestAlert(int $plantId): array
         return ['error' => 'Málo dat - alespoň 1 den s daty potřebný'];
     }
     return $stats;
+}
+
+
+// ───── Weather prediction ─────
+
+function actionWeatherPrediction(int $plantId): array
+{
+    $plant = Database::one(
+        'SELECT id, latitude, longitude, peak_power_kwp, system_loss_pct FROM plants WHERE id = ?',
+        [$plantId]
+    );
+    if (!$plant) throw new \RuntimeException("Plant $plantId nenalezena");
+
+    $lat  = (float) $plant['latitude'];
+    $lon  = (float) $plant['longitude'];
+    $kwp  = (float) $plant['peak_power_kwp'];
+    $loss = 1 - ((float) $plant['system_loss_pct']) / 100;
+
+    // Open-Meteo: hourly direct_normal_irradiance + diffuse_radiation + cloud_cover
+    // 4 dny = přesně rozsah 96h grafu
+    $url = "https://api.open-meteo.com/v1/forecast?"
+         . "latitude={$lat}&longitude={$lon}"
+         . "&hourly=direct_normal_irradiance,diffuse_radiation"
+         . "&forecast_days=4&timezone=Europe%2FPrague";
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 8,
+        CURLOPT_SSL_VERIFYPEER => true,
+    ]);
+    $raw = curl_exec($ch);
+    $err = curl_error($ch);
+    curl_close($ch);
+    if ($raw === false || $raw === '') throw new \RuntimeException('Open-Meteo API nedostupné: ' . $err);
+
+    $data = json_decode($raw, true);
+    $times = $data['hourly']['time'] ?? [];
+    $dni   = $data['hourly']['direct_normal_irradiance'] ?? [];
+    $dhi   = $data['hourly']['diffuse_radiation'] ?? [];
+
+    // Přepočet záření na výkon: GHI ≈ DNI·cos(zenith)+DHI
+    // Zjednodušení: použijeme (DNI + DHI) / 1000 * kWp * efficiency (0.85) * loss
+    $efficiency = 0.85;
+    $forecast = [];
+    foreach ($times as $i => $ts) {
+        $ghi = (($dni[$i] ?? 0) + ($dhi[$i] ?? 0));
+        $kw  = max(0, round(($ghi / 1000) * $kwp * $efficiency * $loss, 3));
+        // Open-Meteo vrací "2026-05-01T14:00", převedeme na "2026-05-01 14:00:00"
+        $tsFormatted = str_replace('T', ' ', $ts) . ':00';
+        $forecast[] = ['ts' => $tsFormatted, 'power_kw' => $kw];
+    }
+
+    // PVGIS denní profil: pro každý den z 4 vygeneruj sinusovou křivku
+    // podle měsíčního PVGIS průměru pro aktuální měsíc
+    $month = (int) date('n');
+    $pvgisRow = Database::one(
+        'SELECT SUM(e_m_kwh) as energy_kwh FROM pvgis_monthly WHERE plant_id = ? AND month = ?',
+        [$plantId, $month]
+    );
+    $pvgisMonthKwh = (float) ($pvgisRow['energy_kwh'] ?? 0);
+    // Denní průměr = měsíc / počet dnů v měsíci
+    $daysInMonth  = (int) date('t');
+    $pvgisDayKwh  = $pvgisMonthKwh / $daysInMonth;
+
+    // Vygeneruj hodinový PVGIS profil (sinusový tvar 5:00-21:00) pro 4 dny
+    $pvgisProfile = [];
+    $startDate = new \DateTime('today midnight');
+    for ($d = 0; $d < 4; $d++) {
+        $day = clone $startDate;
+        $day->modify("+{$d} days");
+        // Celková energie dne = pvgisDayKwh, rozložená sin profilem 6h-20h (14h okno)
+        // Sum sin(π·i/14) for i=0..14 ≈ 7.5 → scale factor = pvgisDayKwh/7.5
+        $scale = $pvgisDayKwh > 0 ? $pvgisDayKwh / 7.5 : 0;
+        for ($h = 0; $h < 24; $h++) {
+            $kw = 0;
+            if ($h >= 6 && $h <= 20) {
+                $pos = ($h - 6) / 14.0; // 0..1
+                $kw  = round($scale * sin(M_PI * $pos), 3);
+            }
+            $ts = $day->format('Y-m-d') . ' ' . str_pad((string)$h, 2, '0', STR_PAD_LEFT) . ':00:00';
+            $pvgisProfile[] = ['ts' => $ts, 'power_kw' => max(0, $kw)];
+        }
+    }
+
+    return [
+        'plant_id'       => $plantId,
+        'forecast'       => $forecast,
+        'pvgis_profile'  => $pvgisProfile,
+        'pvgis_day_kwh'  => round($pvgisDayKwh, 2),
+        'generated_at'   => date('c'),
+    ];
 }

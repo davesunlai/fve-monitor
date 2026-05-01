@@ -256,13 +256,14 @@ async function refreshDetail(plantId) {
 
         const yearToLoad = window._selectedYear || currentYear;
 
-        const [realtime, yearly, range48] = await Promise.all([
+        const [realtime, yearly, range48, weather] = await Promise.all([
             fetchJson(`${API}?action=realtime&plant=${plantId}`),
             fetchJson(`${API}?action=yearly&plant=${plantId}&y=${yearToLoad}`),
             fetchJson(`${API}?action=range&plant=${plantId}&hours=96`),
+            fetchJson(`${API}?action=weather_prediction&plant=${plantId}`).catch(() => null),
         ]);
         renderRealtimeChart(realtime.samples);
-        render48hChart(range48.samples);
+        render48hChart(range48.samples, weather);
         renderYearlyChart(yearly);
         renderYearlyTable(yearly);
         renderYearTabs(yearly, yearToLoad);
@@ -305,7 +306,7 @@ function renderRealtimeChart(samples) {
     });
 }
 
-function render48hChart(samples) {
+function render48hChart(samples, weather = null) {
     const ctx = document.getElementById('chart-48h').getContext('2d');
     if (chart48h) chart48h.destroy();
 
@@ -317,20 +318,77 @@ function render48hChart(samples) {
     });
     const data = samples.map(s => parseFloat(s.power_kw));
 
+    // Sestavíme lookup ts → kW pro weather a pvgis
+    const now = new Date();
+    const weatherMap = {}, pvgisMap = {};
+    if (weather) {
+        (weather.forecast || []).forEach(r => { weatherMap[r.ts.substring(0,16)] = parseFloat(r.power_kw); });
+        (weather.pvgis_profile || []).forEach(r => { pvgisMap[r.ts.substring(0,16)] = parseFloat(r.power_kw); });
+    }
+
+    // Weather forecast: null pro minulé, hodnota pro budoucí
+    const weatherData = samples.map(s => {
+        const key = s.ts.substring(0,16);
+        const t   = new Date(s.ts.replace(' ','T'));
+        if (t <= now) return null;
+        return weatherMap[key] ?? null;
+    });
+
+    // PVGIS profil: vždy (průměrný den), null pro noční
+    const pvgisData = samples.map(s => {
+        const key = s.ts.substring(0,16);
+        const v = pvgisMap[key];
+        return (v !== undefined && v > 0) ? v : null;
+    });
+
+    const datasets = [
+        {
+            label: 'Výkon (kW)',
+            data,
+            borderColor: '#f5b800',
+            backgroundColor: 'rgba(245, 184, 0, 0.15)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            borderWidth: 2,
+            order: 1,
+        },
+        {
+            label: 'PVGIS průměr',
+            data: pvgisData,
+            borderColor: 'rgba(139, 148, 158, 0.7)',
+            backgroundColor: 'transparent',
+            borderDash: [5, 4],
+            fill: false,
+            tension: 0.4,
+            pointRadius: 0,
+            borderWidth: 1.5,
+            spanGaps: false,
+            order: 3,
+        },
+    ];
+
+    if (weather) {
+        datasets.splice(1, 0, {
+            label: 'Předpověď počasí',
+            data: weatherData,
+            borderColor: 'rgba(80, 160, 255, 0.85)',
+            backgroundColor: 'rgba(80, 160, 255, 0.08)',
+            borderDash: [6, 3],
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0,
+            borderWidth: 2,
+            spanGaps: false,
+            order: 2,
+        });
+    }
+
     chart48h = new Chart(ctx, {
         type: 'line',
         data: {
             labels,
-            datasets: [{
-                label: 'Výkon (kW)',
-                data,
-                borderColor: '#f5b800',
-                backgroundColor: 'rgba(245, 184, 0, 0.15)',
-                fill: true,
-                tension: 0.3,
-                pointRadius: 0,
-                borderWidth: 2,
-            }],
+            datasets,
         },
         options: {
             ...chartOptions('kW'),
@@ -354,23 +412,63 @@ function renderYearlyChart(yearly) {
     if (chartYearly) chartYearly.destroy();
     const months = ['Led','Úno','Bře','Dub','Kvě','Čvn','Čvc','Srp','Zář','Říj','Lis','Pro'];
     const expected = [], actual = [];
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+    const displayYear  = parseInt(yearly.year || currentYear, 10);
+
     for (let i = 1; i <= 12; i++) {
         expected.push(yearly.monthly_expected[i] || 0);
         actual.push(yearly.monthly_actual[i] || 0);
     }
+
+    // Weather forecast: zobrazujeme jen pro aktuální rok, aktuální + budoucí měsíce
+    // Hodnota = PVGIS scaled by weather (zatím jednoduše: PVGIS pro budoucí, null pro minulé)
+    // Bude doplněno přes weather_monthly až bude endpoint; nyní PVGIS jako proxy
+    const weatherForecast = [];
+    if (displayYear === currentYear) {
+        for (let i = 1; i <= 12; i++) {
+            if (i < currentMonth) {
+                weatherForecast.push(null);
+            } else if (i === currentMonth) {
+                // Aktuální měsíc: interpolujeme PVGIS
+                weatherForecast.push(yearly.monthly_expected[i] || null);
+            } else {
+                // Budoucí měsíce: PVGIS predikce jako proxy
+                weatherForecast.push(yearly.monthly_expected[i] || null);
+            }
+        }
+    }
+
+    const datasets = [
+        { label: 'PVGIS predikce', data: expected,
+          backgroundColor: 'rgba(139, 148, 158, 0.5)',
+          borderColor: 'rgba(139, 148, 158, 1)', borderWidth: 1, order: 3 },
+        { label: 'Skutečnost', data: actual,
+          backgroundColor: 'rgba(245, 184, 0, 0.7)',
+          borderColor: 'rgba(245, 184, 0, 1)', borderWidth: 1, order: 2 },
+    ];
+
+    if (displayYear === currentYear) {
+        datasets.push({
+            label: 'Výhled (PVGIS)',
+            data: weatherForecast,
+            type: 'line',
+            borderColor: 'rgba(80, 160, 255, 0.8)',
+            backgroundColor: 'transparent',
+            borderDash: [6, 3],
+            pointRadius: 3,
+            pointBackgroundColor: 'rgba(80, 160, 255, 0.8)',
+            fill: false,
+            tension: 0.3,
+            borderWidth: 2,
+            spanGaps: false,
+            order: 1,
+        });
+    }
+
     chartYearly = new Chart(ctx, {
         type: 'bar',
-        data: {
-            labels: months,
-            datasets: [
-                { label: 'PVGIS predikce', data: expected,
-                  backgroundColor: 'rgba(139, 148, 158, 0.5)',
-                  borderColor: 'rgba(139, 148, 158, 1)', borderWidth: 1 },
-                { label: 'Skutečnost', data: actual,
-                  backgroundColor: 'rgba(245, 184, 0, 0.7)',
-                  borderColor: 'rgba(245, 184, 0, 1)', borderWidth: 1 },
-            ],
-        },
+        data: { labels: months, datasets },
         options: chartOptions('kWh'),
     });
 }

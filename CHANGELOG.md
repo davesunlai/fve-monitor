@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## v0.62 — 2026-05-01 — Roční graf plnění FVE
+
+### Přidáno
+- 📊 **Roční graf** v `/performance.php` pod tabulkou
+  - 120 sloupců (12 měsíců × 10 = 9 FVE + PVGIS reference)
+  - Y-osa: % plnění (PVGIS = 100%)
+  - X-osa: pod každým měsícem `1 2 3 4 5 6 7 8 9 P`
+  - Popisky měsíců pod grafem (žluté capitalize)
+  - Legenda s evid čísly = názvy FVE
+  - Tooltip při hover: měsíc + FVE + plnění %
+
+### Opraveno
+- Chart.js wrapper s `position:relative` + pevnou výškou 400px
+  (zabránění nekonečnému nafukování canvasu)
+
+---
+
 ## v0.61 — 2026-05-01 — Refactor + nová stránka Plnění FVE
 
 ### Přidáno
@@ -91,3 +108,20 @@
 ---
 
 (starší verze: viz git log)
+
+---
+
+## v0.63 — 2026-05-01 — Predikce počasí v grafech detailu FVE
+
+### Přidáno
+- 🌤️ **Nový API endpoint `weather_prediction`**
+  - Open-Meteo hourly forecast (DNI + DHI → kW přes kWp + efficiency)
+  - PVGIS denní profil (sinusový tvar z měsíčního průměru)
+- 📈 **96h graf výkonu**: 2 nové datasety
+  - `PVGIS průměr` — šedá přerušovaná linka (průměrný den dle PVGIS)
+  - `Předpověď počasí` — modrá přerušovaná linka (jen pro budoucí hodiny)
+- 📊 **Roční graf**: linka `Výhled (PVGIS)` pro aktuální + budoucí měsíce
+
+### Technické
+- PHP cURL místo file_get_contents (allow_url_fopen=Off na serveru)
+- Open-Meteo timezone=Europe/Prague, 4 dny = přesně rozsah 96h grafu

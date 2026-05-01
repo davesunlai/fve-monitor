@@ -1,4 +1,5 @@
 {
-  "version": "0.62",
-  "message": "📊 Verze 0.62 - roční graf plnění FVE (12×10 sloupců)"
+  "version": "0.64",
+  "message": "📊 Verze 0.62 - roční graf plnění FVE (12×10 sloupců)",
+  "note": "Predikce pocasi Open-Meteo + PVGIS profil v 96h grafu a rocnim prehledu"
 }
