@@ -125,3 +125,11 @@
 ### Technické
 - PHP cURL místo file_get_contents (allow_url_fopen=Off na serveru)
 - Open-Meteo timezone=Europe/Prague, 4 dny = přesně rozsah 96h grafu
+
+---
+
+## v0.64 — 2026-05-01 — Drobné úpravy UX
+
+### Přidáno
+- 🏠 Nadpis v topbaru je odkaz na dashboard (všechny stránky)
+- 📅 Podtitul 96h grafu s rozsahem dat (např. "Po 28.4. — Ne 3.5., 4 dny historie + 2 dny předpověď")

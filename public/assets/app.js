@@ -263,7 +263,7 @@ async function refreshDetail(plantId) {
             fetchJson(`${API}?action=weather_prediction&plant=${plantId}`).catch(() => null),
         ]);
         renderRealtimeChart(realtime.samples);
-        render48hChart(range48.samples, weather);
+        render48hChart(range48.samples, weather, true);
         renderYearlyChart(yearly);
         renderYearlyTable(yearly);
         renderYearTabs(yearly, yearToLoad);
@@ -306,38 +306,78 @@ function renderRealtimeChart(samples) {
     });
 }
 
-function render48hChart(samples, weather = null) {
+function render48hChart(samples, weather = null, extendForecast = false) {
     const ctx = document.getElementById('chart-48h').getContext('2d');
     if (chart48h) chart48h.destroy();
 
-    // Labels: "Po 14:30", "Po 15:00", ...
     const days = ['Ne','Po','Út','St','Čt','Pá','So'];
-    const labels = samples.map(s => {
-        const d = new Date(s.ts.replace(' ', 'T'));
-        return days[d.getDay()] + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-    });
-    const data = samples.map(s => parseFloat(s.power_kw));
+    const now = new Date();
 
     // Sestavíme lookup ts → kW pro weather a pvgis
-    const now = new Date();
     const weatherMap = {}, pvgisMap = {};
     if (weather) {
         (weather.forecast || []).forEach(r => { weatherMap[r.ts.substring(0,16)] = parseFloat(r.power_kw); });
         (weather.pvgis_profile || []).forEach(r => { pvgisMap[r.ts.substring(0,16)] = parseFloat(r.power_kw); });
     }
 
-    // Weather forecast: null pro minulé, hodnota pro budoucí
-    const weatherData = samples.map(s => {
-        const key = s.ts.substring(0,16);
-        const t   = new Date(s.ts.replace(' ','T'));
+    // Rozšíříme vzorky o budoucích 48h z weather forecast — interpolováno na 15min kroky
+    let allSamples = [...samples];
+    if (extendForecast && weather && weather.forecast) {
+        const lastTs = samples.length ? new Date(samples[samples.length-1].ts.replace(' ','T')) : now;
+        const future48h = new Date(now.getTime() + 48 * 3600 * 1000);
+
+        // Sestavíme pole hodinových forecast hodnot seřazených podle času
+        const fcSorted = (weather.forecast || [])
+            .map(r => ({ t: new Date(r.ts.replace(' ','T')), kw: parseFloat(r.power_kw) }))
+            .filter(r => r.t > lastTs && r.t <= future48h)
+            .sort((a,b) => a.t - b.t);
+
+        // Interpoluj na 15min kroky (lineární interpolace mezi hodinovými body)
+        for (let i = 0; i < fcSorted.length - 1; i++) {
+            const t0 = fcSorted[i].t, kw0 = fcSorted[i].kw;
+            const t1 = fcSorted[i+1].t, kw1 = fcSorted[i+1].kw;
+            // 4 kroky po 15 min = 1 hodina
+            for (let q = 0; q < 4; q++) {
+                const frac = q / 4;
+                const tq = new Date(t0.getTime() + frac * (t1.getTime() - t0.getTime()));
+                const kw = kw0 + frac * (kw1 - kw0);
+                const pad = n => String(n).padStart(2,'0');
+                const tsStr = `${tq.getFullYear()}-${pad(tq.getMonth()+1)}-${pad(tq.getDate())} ${pad(tq.getHours())}:${pad(tq.getMinutes())}:00`;
+                allSamples.push({ ts: tsStr, power_kw: null, _forecast: true });
+            }
+        }
+    }
+
+    const labels = allSamples.map(s => {
+        const d = new Date(s.ts.replace(' ', 'T'));
+        return days[d.getDay()] + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+    });
+
+    // Aktualizuj podtitul s rozsahem grafu
+    const rangeEl = document.getElementById('chart-48h-range');
+    if (rangeEl && allSamples.length) {
+        const fmt = ts => {
+            const d = new Date(ts.replace(' ','T'));
+            return days[d.getDay()] + ' ' + d.getDate() + '.' + (d.getMonth()+1) + '.';
+        };
+        const from = fmt(allSamples[0].ts);
+        const to   = fmt(allSamples[allSamples.length-1].ts);
+        rangeEl.textContent = `(${from} — ${to}, 4 dny historie + 2 dny předpověď)`;
+    }
+    const data = allSamples.map(s => s._forecast ? null : parseFloat(s.power_kw));
+
+    // Weather forecast: null pro minulé, hodnota pro budoucí (celý rozsah včetně extension)
+    const weatherData = allSamples.map(s => {
+        const hourKey = s.ts.substring(0,11) + s.ts.substring(11,13) + ':00';
+        const t = new Date(s.ts.replace(' ','T'));
         if (t <= now) return null;
-        return weatherMap[key] ?? null;
+        return weatherMap[hourKey] ?? null;
     });
 
     // PVGIS profil: vždy (průměrný den), null pro noční
-    const pvgisData = samples.map(s => {
-        const key = s.ts.substring(0,16);
-        const v = pvgisMap[key];
+    const pvgisData = allSamples.map(s => {
+        const hourKey = s.ts.substring(0,11) + s.ts.substring(11,13) + ':00';
+        const v = pvgisMap[hourKey];
         return (v !== undefined && v > 0) ? v : null;
     });
 

@@ -98,7 +98,7 @@ require __DIR__ . '/_topbar.php';
                 <div id="yearly-table"></div>
             </div>
             <div class="chart-wrap chart-wrap-fullwidth">
-                <h3>4denní průběh výkonu</h3>
+                <h3>Průběh výkonu <span id="chart-48h-range" style="font-size:0.75rem;font-weight:400;color:var(--text-dim);margin-left:0.5rem"></span></h3>
                 <canvas id="chart-48h"></canvas>
             </div>
             <div class="chart-wrap chart-wrap-map">

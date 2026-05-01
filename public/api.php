@@ -507,11 +507,30 @@ function actionWeatherPrediction(int $plantId): array
     $kwp  = (float) $plant['peak_power_kwp'];
     $loss = 1 - ((float) $plant['system_loss_pct']) / 100;
 
-    // Open-Meteo: hourly direct_normal_irradiance + diffuse_radiation + cloud_cover
+    // Načti průměrný sklon+azimut sekcí (vážený podílem výkonu)
+    $sections = Database::all(
+        'SELECT tilt_deg, azimuth_deg, power_share_pct FROM plant_sections WHERE plant_id = ?',
+        [$plantId]
+    );
+    $tilt = 35; $azimuth = 0; // defaults
+    if (!empty($sections)) {
+        $sumShare = array_sum(array_column($sections, 'power_share_pct')) ?: 100;
+        $tilt = 0; $azimuth = 0;
+        foreach ($sections as $s) {
+            $w = $s['power_share_pct'] / $sumShare;
+            $tilt    += $s['tilt_deg']    * $w;
+            $azimuth += $s['azimuth_deg'] * $w;
+        }
+        $tilt    = round($tilt);
+        $azimuth = round($azimuth);
+    }
+
+    // Open-Meteo: global_tilted_irradiance bere v úvahu sklon+azimut panelů
     // 4 dny = přesně rozsah 96h grafu
     $url = "https://api.open-meteo.com/v1/forecast?"
          . "latitude={$lat}&longitude={$lon}"
-         . "&hourly=direct_normal_irradiance,diffuse_radiation"
+         . "&hourly=global_tilted_irradiance"
+         . "&tilt={$tilt}&azimuth={$azimuth}"
          . "&forecast_days=4&timezone=Europe%2FPrague";
 
     $ch = curl_init($url);
@@ -527,16 +546,14 @@ function actionWeatherPrediction(int $plantId): array
 
     $data = json_decode($raw, true);
     $times = $data['hourly']['time'] ?? [];
-    $dni   = $data['hourly']['direct_normal_irradiance'] ?? [];
-    $dhi   = $data['hourly']['diffuse_radiation'] ?? [];
+    $gti   = $data['hourly']['global_tilted_irradiance'] ?? [];
 
-    // Přepočet záření na výkon: GHI ≈ DNI·cos(zenith)+DHI
-    // Zjednodušení: použijeme (DNI + DHI) / 1000 * kWp * efficiency (0.85) * loss
-    $efficiency = 0.85;
+    // GTI = záření dopadající na nakloněnou plochu panelů [W/m²]
+    // Výkon = GTI/1000 * kWp * PR (performance ratio ~0.80)
+    $pr = 0.80;
     $forecast = [];
     foreach ($times as $i => $ts) {
-        $ghi = (($dni[$i] ?? 0) + ($dhi[$i] ?? 0));
-        $kw  = max(0, round(($ghi / 1000) * $kwp * $efficiency * $loss, 3));
+        $kw  = max(0, round(($gti[$i] ?? 0) / 1000 * $kwp * $pr * $loss, 3));
         // Open-Meteo vrací "2026-05-01T14:00", převedeme na "2026-05-01 14:00:00"
         $tsFormatted = str_replace('T', ' ', $ts) . ':00';
         $forecast[] = ['ts' => $tsFormatted, 'power_kw' => $kw];

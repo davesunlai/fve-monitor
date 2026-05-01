@@ -16,7 +16,7 @@ $showLiveStats = $showLiveStats ?? false;
 $currentUser   = \FveMonitor\Lib\Auth::currentUser();
 ?>
 <header class="topbar">
-    <h1><?= htmlspecialchars($pageHeading) ?></h1>
+    <h1><a href="/index.php" style="color:inherit;text-decoration:none"><?= htmlspecialchars($pageHeading) ?></a></h1>
     <div class="topbar-meta">
         <?php if ($showLiveStats): ?>
             <span id="last-update">—</span>
