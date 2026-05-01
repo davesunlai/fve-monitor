@@ -119,6 +119,5 @@ require __DIR__ . '/_topbar.php';
     <small>FVE Monitor · auto-refresh každých 60 s</small>
 </footer>
 
-<script src="assets/app.js"></script>
 </body>
 </html>
