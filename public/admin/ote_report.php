@@ -152,6 +152,62 @@ if ($format === 'xml') {
 }
 
 // ─────────────────────────────────────────────
+// EXPORT XML RESDATA (OTE POZE formát pro upload)
+// ─────────────────────────────────────────────
+if ($format === 'xml_resdata') {
+    $filename = sprintf('RESDATA_%04d_%02d.xml', $year, $month);
+    header('Content-Type: application/xml; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+
+    $lastDay    = (new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $month)))->modify('last day of this month');
+    $dateFrom   = sprintf('%04d-%02d-01', $year, $month);
+    $dateTo     = $lastDay->format('Y-m-d');
+    $xmlNow     = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d\\TH:i:s');
+    $msgId      = 'FVE-' . $year . '-' . sprintf('%02d', $month) . '-' . substr(md5($xmlNow), 0, 8);
+
+    $senderEan  = '8591824648933';  // Monkstone Solar s.r.o. EAN
+    $receiverEan = '8591824000007'; // OTE EAN
+
+    // Filtruj jen zaškrtnuté FVE
+    $includePlants = isset($_GET['plants']) ? array_map('intval', (array)$_GET['plants']) : null;
+
+    $xml  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+    $xml .= '<RESDATA xmlns="http://www.ote-cr.cz/schema/oze/data"' . "\n";
+    $xml .= '  id="' . $msgId . '"' . "\n";
+    $xml .= '  message-code="PD1"' . "\n";
+    $xml .= '  date-time="' . $xmlNow . '"' . "\n";
+    $xml .= '  dtd-version="1"' . "\n";
+    $xml .= '  dtd-release="1"' . "\n";
+    $xml .= '  answer-required="0"' . "\n";
+    $xml .= '  language="CS">' . "\n";
+    $xml .= '  <SenderIdentification id="' . $senderEan . '" coding-scheme="14"/>' . "\n";
+    $xml .= '  <ReceiverIdentification id="' . $receiverEan . '" coding-scheme="14"/>' . "\n";
+
+    foreach ($rows as $r) {
+        if (empty($r['ote_id']) || empty($r['ote_vyrobna_id'])) continue;
+        if ($includePlants !== null && !in_array((int)$r['id'], $includePlants)) continue;
+
+        $gcr1 = round($r['gcr1_installed_kwp'] / 1000, 5); // kWp → MW
+        $gcr2 = round($r['gcr2_production_kwh'] / 1000, 5); // kWh → MWh
+
+        $xml .= '  <Location' . "\n";
+        $xml .= '    source-id="' . htmlspecialchars($r['ote_id']) . '"' . "\n";
+        $xml .= '    opm-id="' . htmlspecialchars($r['ote_vyrobna_id']) . '"' . "\n";
+        $xml .= '    date-from="' . $dateFrom . '"' . "\n";
+        $xml .= '    date-to="' . $dateTo . '">' . "\n";
+        $xml .= '    <Data value-type="GCR_1" unit="MW" value="' . number_format($gcr1, 5, '.', '') . '"/>' . "\n";
+        $xml .= '    <Data value-type="GCR_2" unit="MWH" value="' . number_format($gcr2, 5, '.', '') . '"/>' . "\n";
+        $xml .= '    <Data value-type="GCR_3" unit="MWH" value="0.00000"/>' . "\n";
+        $xml .= '    <Data value-type="GCR_13D" unit="MWH" value="0.00000"/>' . "\n";
+        $xml .= '  </Location>' . "\n";
+    }
+
+    $xml .= '</RESDATA>' . "\n";
+    echo $xml;
+    exit;
+}
+
+// ─────────────────────────────────────────────
 // HTML zobrazení
 // ─────────────────────────────────────────────
 $totalProduction = array_sum(array_column($rows, 'gcr2_production_kwh'));
@@ -362,7 +418,8 @@ $months = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen',
     <table class="ote-report-table">
         <thead>
             <tr>
-                <th class="text-left">FVE</th>
+                <th style="width:36px;text-align:center"><input type="checkbox" id="chk-all" title="Vybrat vše" style="width:16px;height:16px;cursor:pointer"></th>
+                    <th class="text-left">FVE</th>
                 <th>GCR_1<br><small>kWp</small></th>
                 <th>GCR_2<br><small>svorkova kWh</small></th>
                 <th>GCR_3<br><small>spotreba kWh</small></th>
@@ -374,6 +431,11 @@ $months = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen',
         <tbody>
             <?php foreach ($rows as $r): ?>
                 <tr>
+                    <td style="text-align:center;padding:8px 4px;width:36px">
+                        <input type="checkbox" name="include_plant[]" value="<?= $r['id'] ?>"
+                            class="plant-chk" style="width:16px;height:16px;cursor:pointer"
+                            <?= !empty($r['ote_id']) ? 'checked' : '' ?>>
+                    </td>
                     <td class="text-left">
                         <?= htmlspecialchars($r['name']) ?>
                         <div class="meta-row">
@@ -418,8 +480,11 @@ $months = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen',
             📥 Export CSV
         </a>
         <a href="?year=<?= $year ?>&month=<?= $month ?>&export=xml" class="btn-export secondary">
-            📥 Export XML
+            📥 Export XML (interní)
         </a>
+        <button type="button" onclick="exportResdata()" class="btn-export" style="background:var(--good);color:#000;border:none;cursor:pointer">
+            📤 Export RESDATA (OTE upload)
+        </button>
         <span style="color:var(--text-dim);font-size:0.85rem;margin-left:auto;align-self:center">
             CSV pro CS OTE portál (přepsání) · XML pro budoucí WSDL upload
         </span>
@@ -431,5 +496,34 @@ $months = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen',
         Termín podání: do <strong>10. kalendářního dne</strong> následujícího měsíce.
     </p>
 </main>
+<script>
+// Select-all checkbox
+document.getElementById('chk-all').addEventListener('change', function() {
+    document.querySelectorAll('.plant-chk').forEach(c => c.checked = this.checked);
+});
+// Sync select-all stav
+document.querySelectorAll('.plant-chk').forEach(c => {
+    c.addEventListener('change', () => {
+        const all = document.querySelectorAll('.plant-chk');
+        const checked = document.querySelectorAll('.plant-chk:checked');
+        document.getElementById('chk-all').indeterminate = checked.length > 0 && checked.length < all.length;
+        document.getElementById('chk-all').checked = checked.length === all.length;
+    });
+});
+// Export RESDATA jen pro zaškrtnuté FVE
+function exportResdata() {
+    const ids = Array.from(document.querySelectorAll('.plant-chk:checked')).map(c => c.value);
+    if (ids.length === 0) { alert('Zaškrtni alespoň jednu FVE'); return; }
+    const params = new URLSearchParams({
+        year: '<?= $year ?>',
+        month: '<?= $month ?>',
+        export: 'xml_resdata',
+    });
+    ids.forEach(id => params.append('plants[]', id));
+    window.location.href = '?' + params.toString();
+}
+</script>
 </body>
 </html>
+
+

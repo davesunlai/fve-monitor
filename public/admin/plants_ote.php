@@ -23,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['plants'])) {
                 'UPDATE plants SET
                     ote_id = ?,
                     ote_vyrobna_id = ?,
+                    ote_registrace_id = ?,
                     ean_code = ?,
                     ean_vyrobny = ?,
                     license_number = ?,
@@ -46,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['plants'])) {
             )->execute([
                 trim($data['ote_id'] ?? '')         ?: null,
                 trim($data['ote_vyrobna_id'] ?? '') ?: null,
+                trim($data['ote_registrace_id'] ?? '') ?: null,
                 trim($data['ean_code'] ?? '')       ?: null,
                 trim($data['ean_vyrobny'] ?? '')    ?: null,
                 trim($data['license_number'] ?? '') ?: null,
@@ -266,6 +268,7 @@ $plants = Database::all(
                     <th>Elektrárna</th>
                     <th style="min-width:140px">ID zdroje OTE<br><small style="font-weight:400;color:var(--text-dim)">043009_Z11</small></th>
                     <th style="min-width:140px">ID výrobny ERÚ/OTE<br><small style="font-weight:400;color:var(--text-dim)">38518_T11</small></th>
+                    <th style="min-width:140px">ID registrace OTE<br><small style="font-weight:400;color:var(--text-dim)">2025001158</small></th>
                     <th style="min-width:180px">EAN OPM<br><small style="font-weight:400;color:var(--text-dim)">do/ze sítě</small></th>
                     <th style="min-width:180px">EAN výrobny<br><small style="font-weight:400;color:var(--text-dim)">svorková výroba</small></th>
                     <th style="min-width:110px">Licence ERÚ</th>
@@ -297,6 +300,11 @@ $plants = Database::all(
                             <input type="text" name="plants[<?= $p['id'] ?>][ote_vyrobna_id]"
                                    value="<?= htmlspecialchars($p['ote_vyrobna_id'] ?? '') ?>"
                                    placeholder="38518_T11">
+                        </td>
+                        <td>
+                            <input type="text" name="plants[<?= $p['id'] ?>][ote_registrace_id]"
+                                   value="<?= htmlspecialchars($p['ote_registrace_id'] ?? '') ?>"
+                                   placeholder="2025001158" maxlength="20">
                         </td>
                         <td>
                             <input type="text" name="plants[<?= $p['id'] ?>][ean_code]"

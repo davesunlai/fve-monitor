@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RESDATA xmlns="http://www.ote-cr.cz/schema/oze/data"
+  message-code="TD1" message-type="RESDATA" created="2026-05-02T01:37:21">
+  <SenderIdentification id="36489"/>
+  <ReceiverIdentification id="OTE"/>
+  <Location source-id="043988_Z11" opm-id="39254_T11" date-time-from="2026-04-01T00:00:00">
+    <Data value-type="GCR_1" unit="MW" value="0.60028"/>
+    <Data value-type="GCR_2" unit="MWh" value="60.99590"/>
+    <Data value-type="GCR_3" unit="MWh" value="0.00000"/>
+    <Data value-type="GCR_13D" unit="MWh" value="0.00000"/>
+  </Location>
+  <Location source-id="044154_Z11" opm-id="39375_T11" date-time-from="2026-04-01T00:00:00">
+    <Data value-type="GCR_1" unit="MW" value="0.63423"/>
+    <Data value-type="GCR_2" unit="MWh" value="49.88750"/>
+    <Data value-type="GCR_3" unit="MWh" value="0.00000"/>
+    <Data value-type="GCR_13D" unit="MWh" value="0.00000"/>
+  </Location>
+  <Location source-id="043786_Z11" opm-id="39091_T11" date-time-from="2026-04-01T00:00:00">
+    <Data value-type="GCR_1" unit="MW" value="0.80214"/>
+    <Data value-type="GCR_2" unit="MWh" value="54.89300"/>
+    <Data value-type="GCR_3" unit="MWh" value="0.00000"/>
+    <Data value-type="GCR_13D" unit="MWh" value="0.00000"/>
+  </Location>
+  <Location source-id="045076_Z11" opm-id="39922_T11" date-time-from="2026-04-01T00:00:00">
+    <Data value-type="GCR_1" unit="MW" value="0.42680"/>
+    <Data value-type="GCR_2" unit="MWh" value="53.02710"/>
+    <Data value-type="GCR_3" unit="MWh" value="0.00000"/>
+    <Data value-type="GCR_13D" unit="MWh" value="0.00000"/>
+  </Location>
+  <Location source-id="043009_Z11" opm-id="38518_T11" date-time-from="2026-04-01T00:00:00">
+    <Data value-type="GCR_1" unit="MW" value="0.46978"/>
+    <Data value-type="GCR_2" unit="MWh" value="33.12060"/>
+    <Data value-type="GCR_3" unit="MWh" value="0.00000"/>
+    <Data value-type="GCR_13D" unit="MWh" value="0.00000"/>
+  </Location>
+  <Location source-id="043989_Z11" opm-id="39255_T11" date-time-from="2026-04-01T00:00:00">
+    <Data value-type="GCR_1" unit="MW" value="0.52954"/>
+    <Data value-type="GCR_2" unit="MWh" value="50.65140"/>
+    <Data value-type="GCR_3" unit="MWh" value="0.00000"/>
+    <Data value-type="GCR_13D" unit="MWh" value="0.00000"/>
+  </Location>
+  <Location source-id="043987_Z11" opm-id="39253_T11" date-time-from="2026-04-01T00:00:00">
+    <Data value-type="GCR_1" unit="MW" value="0.49278"/>
+    <Data value-type="GCR_2" unit="MWh" value="41.09970"/>
+    <Data value-type="GCR_3" unit="MWh" value="0.00000"/>
+    <Data value-type="GCR_13D" unit="MWh" value="0.00000"/>
+  </Location>
+  <Location source-id="043010_Z11" opm-id="38519_T11" date-time-from="2026-04-01T00:00:00">
+    <Data value-type="GCR_1" unit="MW" value="0.48590"/>
+    <Data value-type="GCR_2" unit="MWh" value="45.59570"/>
+    <Data value-type="GCR_3" unit="MWh" value="0.00000"/>
+    <Data value-type="GCR_13D" unit="MWh" value="0.00000"/>
+  </Location>
+</RESDATA>

@@ -1,5 +1,5 @@
 {
-  "version": "0.64",
-  "message": "📊 Verze 0.62 - roční graf plnění FVE (12×10 sloupců)",
-  "note": "Predikce pocasi Open-Meteo + PVGIS profil v 96h grafu a rocnim prehledu"
+  "version": "0.65",
+  "buildDate": "2026-05-02",
+  "feature": "OTE RESDATA XML export - validovaný formát"
 }
