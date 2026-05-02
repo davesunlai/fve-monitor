@@ -46,6 +46,7 @@ try {
         'passkey_list'            => actionPasskeyList(),
         'passkey_delete'          => actionPasskeyDelete((int) ($_GET['id'] ?? 0)),
         'weather_prediction'      => actionWeatherPrediction((int) ($_GET['plant'] ?? 0)),
+        'weather_summary'         => actionWeatherSummary(),
         default    => ['error' => 'Neznámá akce: ' . $action],
     };
     echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -599,3 +600,56 @@ function actionWeatherPrediction(int $plantId): array
         'generated_at'   => date('c'),
     ];
 }
+
+// ───── Weather summary pro dashboard (3 dny pro všechny FVE) ─────
+
+function actionWeatherSummary(): array
+{
+    $plants = Database::all(
+        'SELECT id, latitude, longitude, peak_power_kwp FROM plants WHERE is_active = 1'
+    );
+    $result = [];
+    foreach ($plants as $p) {
+        $lat = (float)$p['latitude'];
+        $lon = (float)$p['longitude'];
+        $kwp = (float)$p['peak_power_kwp'];
+        if (!$lat || !$lon) continue;
+
+        $url = "https://api.open-meteo.com/v1/forecast?"
+             . "latitude={$lat}&longitude={$lon}"
+             . "&daily=weather_code,temperature_2m_max,shortwave_radiation_sum"
+             . "&forecast_days=3&timezone=Europe%2FPrague";
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+        $raw = curl_exec($ch);
+        curl_close($ch);
+        if (!$raw) continue;
+
+        $data = json_decode($raw, true);
+        $dates = $data['daily']['time'] ?? [];
+        $codes = $data['daily']['weather_code'] ?? [];
+        $temps = $data['daily']['temperature_2m_max'] ?? [];
+        $rads  = $data['daily']['shortwave_radiation_sum'] ?? [];
+
+        $days = [];
+        foreach ($dates as $i => $d) {
+            // Odhad výroby: radiace [MJ/m²] * kWp * 0.8 (PR) / 3.6 (MJ→kWh)
+            $rad = (float)($rads[$i] ?? 0);
+            $estKwh = round($rad * $kwp * 0.8 / 3.6, 0);
+            $days[] = [
+                'date'         => $d,
+                'weather_code' => (int)($codes[$i] ?? 0),
+                'tmax'         => round((float)($temps[$i] ?? 0)),
+                'est_kwh'      => $estKwh,
+            ];
+        }
+        $result[$p['id']] = $days;
+    }
+    return ['plants' => $result, 'generated_at' => date('c')];
+}
+

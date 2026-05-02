@@ -698,3 +698,21 @@ footer {
     color: var(--accent) !important;
     border-left: 3px solid var(--accent);
 }
+
+
+/* === Weather forecast v dashboard tabulce === */
+.col-weather { width: 130px; }
+.weather-cell { display: flex; gap: 4px; justify-content: center; }
+.weather-day {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 2px 4px; border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    min-width: 36px; font-size: 0.75rem;
+}
+.weather-icon { font-size: 1.1rem; line-height: 1; }
+.weather-temp { color: var(--text-dim); font-size: 0.7rem; }
+.weather-kwh {
+    color: var(--good, #4ade80);
+    font-weight: 600; font-size: 0.7rem;
+}
+.weather-empty { color: var(--text-dim); }

@@ -133,3 +133,33 @@
 ### Přidáno
 - 🏠 Nadpis v topbaru je odkaz na dashboard (všechny stránky)
 - 📅 Podtitul 96h grafu s rozsahem dat (např. "Po 28.4. — Ne 3.5., 4 dny historie + 2 dny předpověď")
+
+---
+
+## v0.66 — 2026-05-02 — Weather forecast widget + OTE RESDATA validní
+
+### Přidáno
+- 🌤️ **Předpověď počasí přímo v dashboard tabulce** — nový sloupec "Předpověď"
+  - 3 dny dopředu (Dnes, Zítra, Pozítří)
+  - Ikona počasí (WMO weather code → emoji)
+  - Maximální teplota
+  - Odhadovaná denní výroba (kWh) z radiace
+  - Tooltip s detaily
+
+### API
+- Nový endpoint `weather_summary` — Open-Meteo daily forecast pro všechny aktivní FVE
+- Použití: `daily=weather_code,temperature_2m_max,shortwave_radiation_sum`
+- Odhad výroby: rad[MJ/m²] × kWp × PR(0.8) / 3.6
+
+### OTE RESDATA — VALIDNÍ FORMÁT! 🎉
+- `message-code="PD1"` (POZE měsíční výkaz, NE TD1!)
+- ROOT atributy: `id`, `date-time`, `dtd-version="1"`, `dtd-release="1"`, `answer-required="0"`, `language="CS"`
+- `SenderIdentification` s EAN13 8591824648933 + `coding-scheme="14"`
+- `ReceiverIdentification` s OTE EAN 8591824000007 + `coding-scheme="14"`
+- `unit="MWH"` velkými písmeny (ne MWh!)
+- `date-from` / `date-to` (xsd:date) na Location
+- ✅ XML validně přijat OTE portálem
+
+### Pending
+- Bump verze na sw.js + version.json
+- Komit + push

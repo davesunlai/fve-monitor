@@ -48,6 +48,37 @@ let detailMarker = null;
 let chart48h = null;
 let plantsCache = [];
 let sparklineCache = {};
+let weatherCache = {};
+
+// WMO weather code → emoji + label
+function weatherIcon(code) {
+    if (code === 0) return {icon: '☀️', label: 'Jasno'};
+    if (code <= 2) return {icon: '🌤️', label: 'Polojasno'};
+    if (code === 3) return {icon: '☁️', label: 'Zataženo'};
+    if (code <= 48) return {icon: '🌫️', label: 'Mlha'};
+    if (code <= 57) return {icon: '🌦️', label: 'Mrholení'};
+    if (code <= 67) return {icon: '🌧️', label: 'Déšť'};
+    if (code <= 77) return {icon: '🌨️', label: 'Sníh'};
+    if (code <= 82) return {icon: '🌧️', label: 'Přeháňky'};
+    if (code <= 86) return {icon: '🌨️', label: 'Sněhové přeháňky'};
+    if (code <= 99) return {icon: '⛈️', label: 'Bouřka'};
+    return {icon: '❓', label: '—'};
+}
+
+function renderWeatherCell(plantId) {
+    const days = weatherCache[plantId];
+    if (!days || !days.length) return '<span class="weather-empty">—</span>';
+    const labels = ['Dnes', 'Zítra', 'Pozítří'];
+    return '<div class="weather-cell">' + days.slice(0, 3).map((d, i) => {
+        const w = weatherIcon(d.weather_code);
+        return `<div class="weather-day" title="${labels[i]} ${d.date}: ${w.label}, max ${d.tmax}°C, odhad ${d.est_kwh} kWh">
+            <div class="weather-icon">${w.icon}</div>
+            <div class="weather-temp">${d.tmax}°</div>
+            <div class="weather-kwh">${d.est_kwh}</div>
+        </div>`;
+    }).join('') + '</div>';
+}
+
 let activePlantId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -60,11 +91,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadSummary() {
     try {
-        const [data, sparkData] = await Promise.all([
+        const [data, sparkData, weatherData] = await Promise.all([
             fetchJson(`${API}?action=summary`),
             fetchJson(`${API}?action=sparkline`),
+            fetchJson(`${API}?action=weather_summary`).catch(() => ({plants: {}})),
         ]);
         sparklineCache = sparkData.plants || {};
+        weatherCache = weatherData.plants || {};
         renderPlants(data.plants);
         renderSummaryBar(data.plants);
         document.getElementById('last-update').textContent =
@@ -167,7 +200,7 @@ function renderPlants(plants) {
             <td class="col-num">${formatEnergy(m.expected_kwh)}</td>
             <td class="col-num ${ratioClass}">${ratioPct} %</td>
             <td class="col-num ${offline ? 'value-offline' : ''}">${lastUpdStr}</td>
-            <td class="col-sparkline"><canvas class="sparkline" data-plant-id="${p.id}" width="120" height="32"></canvas></td>
+            <td class="col-weather">${renderWeatherCell(p.id)}</td><td class="col-sparkline"><canvas class="sparkline" data-plant-id="${p.id}" width="120" height="32"></canvas></td>
             <td class="col-num ${alarms > 0 ? 'value-bad' : ''}">${alarms}</td>
         </tr>`;
     }).join('');

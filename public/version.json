@@ -1,5 +1,5 @@
 {
-  "version": "0.65",
+  "version": "0.66",
   "buildDate": "2026-05-02",
-  "feature": "OTE RESDATA XML export - validovaný formát"
+  "feature": "Weather forecast widget v dashboard tabulce + OTE RESDATA validovany format"
 }

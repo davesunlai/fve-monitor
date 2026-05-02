@@ -68,13 +68,14 @@ require __DIR__ . '/_topbar.php';
                         <th class="col-num">Měsíc skutečnost</th>
                         <th class="col-num">PVGIS měsíc</th>
                         <th class="col-num">Plnění</th>
+                        <th class="col-weather">Předpověď</th>
                         <th class="col-num">Update</th>
                         <th class="col-sparkline">4denní průběh</th>
                         <th class="col-num">Alarmy</th>
                     </tr>
                 </thead>
                 <tbody id="plants-tbody">
-                    <tr><td colspan="10" class="loading">Načítám…</td></tr>
+                    <tr><td colspan="11" class="loading">Načítám…</td></tr>
                 </tbody>
             </table>
         </div>
