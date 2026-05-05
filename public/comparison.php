@@ -7,7 +7,7 @@ use FveMonitor\Lib\Auth;
 
 Auth::start();
 if (!Auth::isLoggedIn()) {
-    header('Location: admin/login.php');
+    header('Location: admin/login.php?r=' . urlencode($_SERVER['REQUEST_URI']));
     exit;
 }
 $user = Auth::currentUser();

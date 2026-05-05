@@ -163,3 +163,16 @@
 ### Pending
 - Bump verze na sw.js + version.json
 - Komit + push
+
+---
+
+## v0.67 — 2026-05-03 — OTE RESDATA PD1/PDR + login redirect
+
+### Přidáno
+- 🔘 **Dropdown výběr message-code** v OTE export panelu (PD1 / PDR)
+  - PD1 = Měsíční výkaz výroby z OZE (s podporou)
+  - PDR = Data svorkové výroby vnořeného výrobce (bez podpory)
+  - Filename obsahuje msg_code: RESDATA_PD1_2026_04.xml
+
+### Opraveno
+- 🔐 Přesměrování na login pro neautorizované přístupy na comparison.php a performance.php

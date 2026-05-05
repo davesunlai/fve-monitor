@@ -155,7 +155,8 @@ if ($format === 'xml') {
 // EXPORT XML RESDATA (OTE POZE formát pro upload)
 // ─────────────────────────────────────────────
 if ($format === 'xml_resdata') {
-    $filename = sprintf('RESDATA_%04d_%02d.xml', $year, $month);
+    $msgCodeForFile = $_GET['msg_code'] ?? 'PD1';
+    $filename = sprintf('RESDATA_%s_%04d_%02d.xml', $msgCodeForFile, $year, $month);
     header('Content-Type: application/xml; charset=UTF-8');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
 
@@ -174,7 +175,9 @@ if ($format === 'xml_resdata') {
     $xml  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
     $xml .= '<RESDATA xmlns="http://www.ote-cr.cz/schema/oze/data"' . "\n";
     $xml .= '  id="' . $msgId . '"' . "\n";
-    $xml .= '  message-code="PD1"' . "\n";
+    $msgCode = $_GET['msg_code'] ?? 'PD1';
+    if (!in_array($msgCode, ['PD1', 'PDR'], true)) $msgCode = 'PD1';
+    $xml .= '  message-code="' . $msgCode . '"' . "\n";
     $xml .= '  date-time="' . $xmlNow . '"' . "\n";
     $xml .= '  dtd-version="1"' . "\n";
     $xml .= '  dtd-release="1"' . "\n";
@@ -482,6 +485,10 @@ $months = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen',
         <a href="?year=<?= $year ?>&month=<?= $month ?>&export=xml" class="btn-export secondary">
             📥 Export XML (interní)
         </a>
+        <select id="msg-code-select" class="btn-export secondary" style="background:#222;color:#fff;cursor:pointer;padding:8px 12px;border:1px solid #444;border-radius:4px">
+            <option value="PD1">PD1 - Měsíční výkaz výroby z OZE</option>
+            <option value="PDR">PDR - Data svorkové výroby vnořeného výrobce</option>
+        </select>
         <button type="button" onclick="exportResdata()" class="btn-export" style="background:var(--good);color:#000;border:none;cursor:pointer">
             📤 Export RESDATA (OTE upload)
         </button>
@@ -514,10 +521,12 @@ document.querySelectorAll('.plant-chk').forEach(c => {
 function exportResdata() {
     const ids = Array.from(document.querySelectorAll('.plant-chk:checked')).map(c => c.value);
     if (ids.length === 0) { alert('Zaškrtni alespoň jednu FVE'); return; }
+    const msgCode = document.getElementById('msg-code-select').value;
     const params = new URLSearchParams({
         year: '<?= $year ?>',
         month: '<?= $month ?>',
         export: 'xml_resdata',
+        msg_code: msgCode,
     });
     ids.forEach(id => params.append('plants[]', id));
     window.location.href = '?' + params.toString();

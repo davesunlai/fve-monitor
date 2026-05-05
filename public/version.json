@@ -1,5 +1,5 @@
 {
-  "version": "0.66",
-  "buildDate": "2026-05-02",
-  "feature": "Weather forecast widget v dashboard tabulce + OTE RESDATA validovany format"
+  "version": "0.67",
+  "buildDate": "2026-05-03",
+  "feature": "OTE RESDATA dropdown PD1/PDR + login redirect na comparison/performance"
 }

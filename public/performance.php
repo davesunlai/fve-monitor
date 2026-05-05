@@ -6,7 +6,7 @@ use FveMonitor\Lib\Auth;
 use FveMonitor\Lib\Database;
 
 if (!Auth::isLoggedIn()) {
-    header('Location: /admin/login.php');
+    header('Location: admin/login.php?r=' . urlencode($_SERVER['REQUEST_URI']));
     exit;
 }
 
