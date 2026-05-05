@@ -438,7 +438,7 @@ require __DIR__ . '/_topbar.php';
     <table class="comparison-table">
         <thead>
             <tr>
-                <th class="day-col">Den</th>
+                <th class="day-col">Den<div>datum / den v týdnu</div></th>
                 <?php
                 $headerLabel = match($mode) {
                     'mesicni' => 'měsíční Ø',
@@ -446,7 +446,7 @@ require __DIR__ . '/_topbar.php';
                     default   => 'denní Ø',
                 };
                 ?>
-                <th style="width:62px;min-width:62px;max-width:62px">Ø všech<br><small style="font-weight:400;opacity:0.6;font-size:0.6rem"><?= $headerLabel ?></small></th>
+                <th style="width:62px;min-width:62px;max-width:62px">Ø všech<br><small style="font-weight:400;opacity:0.6;font-size:0.6rem"><?= $headerLabel ?></small><div style="font-size:0.58rem;font-weight:400;opacity:0.55;margin-top:1px">kWh/kWp/den</div></th>
                 <?php foreach ($plants as $p):
                     $pStats = $plantProductivity[(int)$p['id']];
                     $pAvg = $pStats['days'] > 0 ? $pStats['sum'] / $pStats['days'] : 0;
@@ -458,6 +458,7 @@ require __DIR__ . '/_topbar.php';
                         </div>
                         <div style="font-size:0.62rem;font-weight:600;color:var(--accent);margin-top:2px" title="Průměrná denní specifická výroba FVE za vybraný měsíc">
                             Ø <?= number_format($pAvg, 3, ',', '') ?>
+                            <span style="font-weight:400;opacity:0.6;font-size:0.55rem">kWh/kWp/den</span>
                         </div>
                     </th>
                 <?php endforeach; ?>

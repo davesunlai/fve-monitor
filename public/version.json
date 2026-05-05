@@ -1,5 +1,5 @@
 {
-  "version": "0.67",
-  "buildDate": "2026-05-03",
-  "feature": "OTE RESDATA dropdown PD1/PDR + login redirect na comparison/performance"
+  "version": "0.68",
+  "buildDate": "2026-05-05",
+  "feature": "comparison.php – popisky v hlavičce tabulky (Den, Ø všech, FVE sloupce s jednotkou kWh/kWp/den)"
 }
