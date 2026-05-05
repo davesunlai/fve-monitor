@@ -1,5 +1,13 @@
 # CHANGELOG
 
+
+## v0.68 — 2026-05-05
+
+**comparison.php — popisky v hlavičce tabulky**
+
+- Sloupec **Den**: doplněn podtitulek `datum / den v týdnu`
+- Sloupec **Ø všech**: doplněna jednotka `kWh/kWp/den` pod dynamický popisek (denní/měsíční Ø podle režimu)
+- Sloupce **jednotlivých FVE**: u Ø hodnoty průměrné productivity doplněna jednotka `kWh/kWp/den`
 ## v0.62 — 2026-05-01 — Roční graf plnění FVE
 
 ### Přidáno
