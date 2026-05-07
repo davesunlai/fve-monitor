@@ -47,7 +47,7 @@ try {
         'passkey_delete'          => actionPasskeyDelete((int) ($_GET['id'] ?? 0)),
         'weather_prediction'      => actionWeatherPrediction((int) ($_GET['plant'] ?? 0)),
         'weather_summary'         => actionWeatherSummary(),
-        'spot_prices'             => actionSpotPrices($_GET['from'] ?? null, $_GET['to'] ?? null, $_GET['day'] ?? null),
+        'spot_prices'             => actionSpotPrices($_GET['from'] ?? null, $_GET['to'] ?? null, $_GET['day'] ?? null, $_GET['granularity'] ?? 'hour'),
         default    => ['error' => 'Neznámá akce: ' . $action],
     };
     echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -661,10 +661,15 @@ function actionWeatherSummary(): array
  *   ?action=spot_prices&day=2026-05-07           — konkrétní den (24 hodin)
  *   ?action=spot_prices&from=2026-04-01&to=2026-04-30  — rozsah (denní průměry)
  */
-function actionSpotPrices(?string $from, ?string $to, ?string $day): array
+function actionSpotPrices(?string $from, ?string $to, ?string $day, string $granularity = 'hour'): array
 {
     // Validace formátu data
     $isDate = fn($s) => $s && preg_match('/^\d{4}-\d{2}-\d{2}$/', $s);
+
+    // ─── 15min granularita ───
+    if ($granularity === '15min') {
+        return actionSpotPrices15min($from, $to, $day, $isDate);
+    }
 
     // 1) Konkrétní den → 24 hodin
     if ($isDate($day)) {
@@ -762,5 +767,118 @@ function spotStats(array $rows): array
         'min_czk' => round(min($czk), 2),
         'avg_czk' => round(array_sum($czk) / count($czk), 2),
         'max_czk' => round(max($czk), 2),
+    ];
+}
+
+/**
+ * 15min spotové ceny (VDT).
+ *   ?action=spot_prices&granularity=15min                    — dnes + zítra
+ *   ?action=spot_prices&granularity=15min&day=2026-05-07     — 96 period dne
+ *   ?action=spot_prices&granularity=15min&from=A&to=B        — agregát po dnech
+ */
+function actionSpotPrices15min(?string $from, ?string $to, ?string $day, callable $isDate): array
+{
+    if ($isDate($day)) {
+        $rows = \FveMonitor\Lib\Database::all(
+            "SELECT delivery_day, period, time_from,
+                    price_avg_eur, price_min_eur, price_max_eur,
+                    price_avg_czk, price_min_czk, price_max_czk,
+                    volume_mwh, eur_czk_rate
+             FROM spot_prices_15min WHERE delivery_day = ? ORDER BY period",
+            [$day]
+        );
+        return [
+            'mode'         => 'day_15min',
+            'granularity'  => '15min',
+            'day'          => $day,
+            'periods'      => $rows,
+            'stats'        => spot15Stats($rows),
+            'generated_at' => date('c'),
+        ];
+    }
+
+    if ($isDate($from) && $isDate($to)) {
+        $daily = \FveMonitor\Lib\Database::all(
+            "SELECT delivery_day,
+                    ROUND(MIN(price_avg_eur),2) AS min_eur,
+                    ROUND(AVG(price_avg_eur),2) AS avg_eur,
+                    ROUND(MAX(price_avg_eur),2) AS max_eur,
+                    ROUND(MIN(price_avg_czk),2) AS min_czk,
+                    ROUND(AVG(price_avg_czk),2) AS avg_czk,
+                    ROUND(MAX(price_avg_czk),2) AS max_czk,
+                    SUM(CASE WHEN price_avg_eur < 0 THEN 1 ELSE 0 END) AS negative_periods,
+                    COUNT(*) AS periods
+             FROM spot_prices_15min
+             WHERE delivery_day BETWEEN ? AND ?
+             GROUP BY delivery_day
+             ORDER BY delivery_day",
+            [$from, $to]
+        );
+        $all = \FveMonitor\Lib\Database::all(
+            "SELECT price_avg_eur AS p_eur, price_avg_czk AS p_czk
+             FROM spot_prices_15min WHERE delivery_day BETWEEN ? AND ?",
+            [$from, $to]
+        );
+        return [
+            'mode'         => 'range_15min',
+            'granularity'  => '15min',
+            'from'         => $from,
+            'to'           => $to,
+            'days'         => $daily,
+            'stats'        => spot15Stats($all, 'p_eur', 'p_czk'),
+            'generated_at' => date('c'),
+        ];
+    }
+
+    // Default: dnes + zítra
+    $today    = date('Y-m-d');
+    $tomorrow = date('Y-m-d', strtotime('+1 day'));
+
+    $rows = \FveMonitor\Lib\Database::all(
+        "SELECT delivery_day, period, time_from,
+                price_avg_eur, price_min_eur, price_max_eur,
+                price_avg_czk, price_min_czk, price_max_czk,
+                volume_mwh, eur_czk_rate
+         FROM spot_prices_15min WHERE delivery_day IN (?, ?) ORDER BY delivery_day, period",
+        [$today, $tomorrow]
+    );
+    $byDay = ['today' => [], 'tomorrow' => []];
+    foreach ($rows as $r) {
+        $key = ($r['delivery_day'] === $today) ? 'today' : 'tomorrow';
+        $byDay[$key][] = $r;
+    }
+    return [
+        'mode'               => 'today_tomorrow_15min',
+        'granularity'        => '15min',
+        'today_date'         => $today,
+        'tomorrow_date'      => $tomorrow,
+        'today'              => $byDay['today'],
+        'tomorrow'           => $byDay['tomorrow'],
+        'today_stats'        => spot15Stats($byDay['today']),
+        'tomorrow_stats'     => spot15Stats($byDay['tomorrow']),
+        'tomorrow_available' => count($byDay['tomorrow']) > 0,
+        'generated_at'       => date('c'),
+    ];
+}
+
+function spot15Stats(array $rows, string $eurKey = 'price_avg_eur', string $czkKey = 'price_avg_czk'): array
+{
+    if (empty($rows)) {
+        return ['count' => 0, 'min_eur' => null, 'avg_eur' => null, 'max_eur' => null,
+                'min_czk' => null, 'avg_czk' => null, 'max_czk' => null,
+                'negative_periods' => 0];
+    }
+    $eur = array_filter(array_map(fn($r) => $r[$eurKey] !== null ? (float) $r[$eurKey] : null, $rows), fn($v) => $v !== null);
+    $czk = array_filter(array_map(fn($r) => $r[$czkKey] !== null ? (float) $r[$czkKey] : null, $rows), fn($v) => $v !== null);
+    $neg = count(array_filter($eur, fn($v) => $v < 0));
+    return [
+        'count'   => count($rows),
+        'min_eur' => round(min($eur), 2),
+        'avg_eur' => round(array_sum($eur) / count($eur), 2),
+        'max_eur' => round(max($eur), 2),
+        'min_czk' => round(min($czk), 2),
+        'avg_czk' => round(array_sum($czk) / count($czk), 2),
+        'max_czk' => round(max($czk), 2),
+        'negative_periods' => $neg,
     ];
 }

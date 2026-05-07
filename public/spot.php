@@ -13,6 +13,10 @@ if (!Auth::isLoggedIn()) {
 $tab = $_GET['tab'] ?? 'today';
 if (!in_array($tab, ['today', 'tomorrow', 'history'], true)) $tab = 'today';
 
+// granularita: 15min default pro dnes/zítra (od 1.10.2024 OTE), hour pro starší historii
+$granularity = $_GET['gran'] ?? ($tab === 'history' ? 'hour' : '15min');
+if (!in_array($granularity, ['hour', '15min'], true)) $granularity = '15min';
+
 $pageTitle    = 'Spotové ceny — FVE Monitor';
 $pageHeading  = '⚡ Spotové ceny elektřiny';
 $activePage   = 'spot';
@@ -29,7 +33,12 @@ require __DIR__ . '/_app_head.php';
         <a href="?tab=today" class="spot-tab <?= $tab === 'today' ? 'active' : '' ?>">📅 Dnes</a>
         <a href="?tab=tomorrow" class="spot-tab <?= $tab === 'tomorrow' ? 'active' : '' ?>">🔜 Zítra</a>
         <a href="?tab=history" class="spot-tab <?= $tab === 'history' ? 'active' : '' ?>">📊 Historie</a>
-        <span class="spot-source">Zdroj: OTE-CR denní trh · kurz ČNB</span>
+        <div class="spot-gran">
+            <label>Granularita:</label>
+            <a href="?tab=<?= $tab ?>&gran=15min<?= isset($_GET['from']) ? '&from='.htmlspecialchars($_GET['from']).'&to='.htmlspecialchars($_GET['to']) : '' ?>" class="gran-btn <?= $granularity === '15min' ? 'active' : '' ?>">15 min (VDT)</a>
+            <a href="?tab=<?= $tab ?>&gran=hour<?= isset($_GET['from']) ? '&from='.htmlspecialchars($_GET['from']).'&to='.htmlspecialchars($_GET['to']) : '' ?>" class="gran-btn <?= $granularity === 'hour' ? 'active' : '' ?>">1 hod (DT)</a>
+        </div>
+        <span class="spot-source">Zdroj: OTE-CR <?= $granularity === '15min' ? 'vnitrodenní trh (VDT)' : 'denní trh (DT)' ?> · kurz ČNB</span>
     </div>
 
     <!-- Statistiky karty -->
@@ -112,8 +121,35 @@ require __DIR__ . '/_app_head.php';
     border-bottom: 1px solid var(--surface);
     font-weight: 600;
 }
-.spot-source {
+.spot-gran {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     margin-left: auto;
+    padding: 0 8px 8px;
+}
+.spot-gran label {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+}
+.gran-btn {
+    padding: 4px 10px;
+    background: var(--surface-2);
+    color: var(--text-dim);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.78rem;
+}
+.gran-btn:hover { color: var(--text); }
+.gran-btn.active {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+    font-weight: 600;
+}
+.spot-source {
+    margin-left: 0;
     color: var(--text-dim);
     font-size: 0.78rem;
     padding: 0 8px 8px;
@@ -210,6 +246,7 @@ require __DIR__ . '/_app_head.php';
 const TAB = <?= json_encode($tab) ?>;
 const FROM = <?= json_encode($_GET['from'] ?? null) ?>;
 const TO = <?= json_encode($_GET['to'] ?? null) ?>;
+const GRAN = <?= json_encode($granularity) ?>;
 
 // ─── Helpery ───
 const fmt = (v, dec = 2) => {
@@ -220,6 +257,27 @@ const fmtDate = (s) => {
     const d = new Date(s + 'T00:00:00');
     return d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric', year: 'numeric' });
 };
+// Normalizuje data z hourly i 15min API do společného formátu {label, eur, czk}
+function normalizeRows(rows, gran) {
+    if (gran === '15min') {
+        return rows.map(r => ({
+            label: r.time_from.slice(0, 5),  // "00:15:00" → "00:15"
+            period: r.period,
+            eur: parseFloat(r.price_avg_eur),
+            czk: parseFloat(r.price_avg_czk),
+            eur_min: r.price_min_eur !== null ? parseFloat(r.price_min_eur) : null,
+            eur_max: r.price_max_eur !== null ? parseFloat(r.price_max_eur) : null,
+            volume: r.volume_mwh !== null ? parseFloat(r.volume_mwh) : null,
+        }));
+    }
+    return rows.map(r => ({
+        label: String(r.hour).padStart(2, '0') + ':00',
+        hour: r.hour,
+        eur: parseFloat(r.price_eur_mwh),
+        czk: parseFloat(r.price_czk_mwh),
+    }));
+}
+
 const cellClass = (eur, min, max) => {
     if (eur === min && min !== max) return 'is-min';
     if (eur === max && min !== max) return 'is-max';
@@ -266,9 +324,10 @@ function renderStats(stats, label = '') {
 
 // ─── Render: hodinový graf (sloupcový) ───
 function renderHourlyChart(rows, title) {
-    const labels = rows.map(r => String(r.hour).padStart(2, '0') + ':00');
-    const eur = rows.map(r => parseFloat(r.price_eur_mwh));
-    const czk = rows.map(r => parseFloat(r.price_czk_mwh));
+    const labels = rows.map(r => r.label);
+    const eur = rows.map(r => r.eur);
+    const czk = rows.map(r => r.czk);
+    const is15 = GRAN === '15min';
 
     document.getElementById('chart-title').textContent = title;
 
@@ -282,12 +341,14 @@ function renderHourlyChart(rows, title) {
                 label: 'Kč/MWh',
                 data: czk,
                 backgroundColor: czk.map(v => {
-                    if (v < 0) return 'rgba(74, 222, 128, 0.7)';
-                    if (v > 3500) return 'rgba(248, 113, 113, 0.8)';
-                    return 'rgba(251, 191, 36, 0.7)';
+                    if (v < 0) return 'rgba(74, 222, 128, 0.85)';
+                    if (v > 3500) return 'rgba(248, 113, 113, 0.85)';
+                    return 'rgba(251, 191, 36, 0.75)';
                 }),
                 borderColor: 'rgba(251, 191, 36, 1)',
-                borderWidth: 1,
+                borderWidth: 0.5,
+                barPercentage: is15 ? 1.0 : 0.85,
+                categoryPercentage: is15 ? 1.0 : 0.85,
             }]
         },
         options: {
@@ -297,10 +358,23 @@ function renderHourlyChart(rows, title) {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
+                        title: (items) => {
+                            const r = rows[items[0].dataIndex];
+                            return is15 ? `Period ${r.period} · ${r.label}` : `${r.label}`;
+                        },
                         label: (ctx) => {
-                            const e = eur[ctx.dataIndex];
-                            const k = czk[ctx.dataIndex];
-                            return [`${fmt(k, 0)} Kč/MWh`, `${fmt(k / 1000, 3)} Kč/kWh`, `${fmt(e)} €/MWh`];
+                            const r = rows[ctx.dataIndex];
+                            const lines = [
+                                `${fmt(r.czk, 0)} Kč/MWh  (${fmt(r.czk / 1000, 3)} Kč/kWh)`,
+                                `${fmt(r.eur)} €/MWh`,
+                            ];
+                            if (is15 && r.eur_min !== null && r.eur_max !== null) {
+                                lines.push(`Rozpětí: ${fmt(r.eur_min)} – ${fmt(r.eur_max)} €/MWh`);
+                            }
+                            if (is15 && r.volume !== null) {
+                                lines.push(`Objem: ${fmt(r.volume, 1)} MWh`);
+                            }
+                            return lines;
                         }
                     }
                 }
@@ -310,7 +384,18 @@ function renderHourlyChart(rows, title) {
                     title: { display: true, text: 'Kč/MWh' },
                     grid: { color: 'rgba(255,255,255,0.05)' }
                 },
-                x: { grid: { display: false } }
+                x: {
+                    grid: { display: false },
+                    ticks: is15 ? {
+                        autoSkip: true,
+                        maxTicksLimit: 24,
+                        callback: function(val, idx) {
+                            // Zobraz jen každý 4. tick (= celé hodiny)
+                            const lbl = this.getLabelForValue(val);
+                            return lbl && lbl.endsWith(':00') ? lbl : '';
+                        }
+                    } : {}
+                }
             }
         }
     });
@@ -319,29 +404,49 @@ function renderHourlyChart(rows, title) {
 // ─── Render: hodinová tabulka ───
 function renderHourlyTable(rows, title) {
     document.getElementById('table-title').textContent = title;
+    const is15 = GRAN === '15min';
+    const colInterval = is15 ? 'Interval' : 'Hodina';
+    const extraCols = is15 ? '<th>Min €/MWh</th><th>Max €/MWh</th><th>Objem MWh</th>' : '';
+    const colspan = is15 ? 7 : 4;
+
     document.getElementById('spot-thead').innerHTML = `
         <tr>
-            <th>Hodina</th>
+            <th>${colInterval}</th>
             <th>Kč/kWh</th>
             <th>Kč/MWh</th>
             <th>EUR/MWh</th>
+            ${extraCols}
         </tr>
     `;
     if (!rows || rows.length === 0) {
-        document.getElementById('spot-tbody').innerHTML = '<tr><td colspan="4" class="empty-msg">Žádná data — možná ještě nebyla publikována</td></tr>';
+        document.getElementById('spot-tbody').innerHTML = `<tr><td colspan="${colspan}" class="empty-msg">Žádná data — možná ještě nebyla publikována</td></tr>`;
         return;
     }
-    const czk = rows.map(r => parseFloat(r.price_czk_mwh));
+    const czk = rows.map(r => r.czk);
     const min = Math.min(...czk), max = Math.max(...czk);
     document.getElementById('spot-tbody').innerHTML = rows.map(r => {
-        const e = parseFloat(r.price_eur_mwh);
-        const k = parseFloat(r.price_czk_mwh);
+        let intervalLabel;
+        if (is15) {
+            // 15min: time_from "00:15" → end "00:30"
+            const [h, m] = r.label.split(':').map(Number);
+            const endM = (m + 15) % 60;
+            const endH = (h + Math.floor((m + 15) / 60)) % 24;
+            intervalLabel = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')} – ${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}`;
+        } else {
+            intervalLabel = `${String(r.hour).padStart(2,'0')}:00 – ${String((r.hour + 1) % 24).padStart(2,'0')}:00`;
+        }
+
+        const extra = is15
+            ? `<td>${fmt(r.eur_min)}</td><td>${fmt(r.eur_max)}</td><td>${fmt(r.volume, 1)}</td>`
+            : '';
+
         return `
-            <tr class="${cellClass(k, min, max)}">
-                <td>${String(r.hour).padStart(2, '0')}:00 – ${String((r.hour + 1) % 24).padStart(2, '0')}:00</td>
-                <td><strong>${fmt(k / 1000, 3)}</strong></td>
-                <td class="${priceColor(e)}">${fmt(k, 0)}</td>
-                <td>${fmt(e)}</td>
+            <tr class="${cellClass(r.czk, min, max)}">
+                <td>${intervalLabel}</td>
+                <td><strong>${fmt(r.czk / 1000, 3)}</strong></td>
+                <td class="${priceColor(r.eur)}">${fmt(r.czk, 0)}</td>
+                <td>${fmt(r.eur)}</td>
+                ${extra}
             </tr>
         `;
     }).join('');
@@ -455,7 +560,7 @@ function renderDailyTable(days, title) {
 // ─── Načtení dat dle tabu ───
 async function loadData() {
     try {
-        let url = '/api.php?action=spot_prices';
+        let url = '/api.php?action=spot_prices&granularity=' + GRAN;
         if (TAB === 'history') {
             url += '&from=' + (FROM || new Date(Date.now() - 30*86400000).toISOString().slice(0,10))
                  + '&to=' + (TO || new Date().toISOString().slice(0,10));
@@ -465,14 +570,15 @@ async function loadData() {
         const data = await r.json();
 
         if (TAB === 'today') {
-            const rows = data.today || [];
+            const rows = normalizeRows(data.today || [], GRAN);
             renderStats(data.today_stats, '· dnes');
-            renderHourlyChart(rows, `Hodinové ceny — dnes (${fmtDate(data.today_date)})`);
+            const titlePart = GRAN === '15min' ? '15min ceny' : 'Hodinové ceny';
+            renderHourlyChart(rows, `${titlePart} — dnes (${fmtDate(data.today_date)})`);
             renderHourlyTable(rows, `Tabulka cen — dnes`);
         }
         else if (TAB === 'tomorrow') {
-            const rows = data.tomorrow || [];
-            if (rows.length === 0) {
+            const rawRows = data.tomorrow || [];
+            if (rawRows.length === 0) {
                 document.getElementById('stats-cards').innerHTML =
                     '<div class="empty-msg" style="grid-column:1/-1;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:1.5rem">' +
                     '⏳ Ceny pro zítřek (' + fmtDate(data.tomorrow_date) + ') ještě nebyly publikovány.<br>' +
@@ -481,8 +587,10 @@ async function loadData() {
                 renderHourlyTable([], `Tabulka cen — zítra`);
                 return;
             }
+            const rows = normalizeRows(rawRows, GRAN);
             renderStats(data.tomorrow_stats, '· zítra');
-            renderHourlyChart(rows, `Hodinové ceny — zítra (${fmtDate(data.tomorrow_date)})`);
+            const titlePart = GRAN === '15min' ? '15min ceny' : 'Hodinové ceny';
+            renderHourlyChart(rows, `${titlePart} — zítra (${fmtDate(data.tomorrow_date)})`);
             renderHourlyTable(rows, `Tabulka cen — zítra`);
         }
         else if (TAB === 'history') {
