@@ -1,5 +1,5 @@
 // FVE Monitor Service Worker
-const CACHE_NAME = '0.74' + Date.now();
+const CACHE_NAME = '0.74.1' + Date.now();
 const CORE_ASSETS = [
     '/',
     '/index.php',

@@ -130,33 +130,47 @@ require __DIR__ . '/_app_head.php';
 <style>
 .spot-tabs {
     display: flex;
-    gap: 4px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 1rem;
+    gap: 6px;
+    margin-bottom: 1.25rem;
     align-items: center;
     flex-wrap: wrap;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border);
+    position: relative;
 }
 .spot-tab {
-    padding: 10px 18px;
-    background: var(--surface-2);
+    padding: 12px 22px;
+    background: transparent;
     color: var(--text-dim);
     text-decoration: none;
-    border-radius: 6px 6px 0 0;
-    border: 1px solid var(--border);
-    border-bottom: none;
+    border-radius: 8px;
+    border: 1.5px solid var(--border);
     font-weight: 500;
+    font-size: 1rem;
     transition: all 0.15s;
-    margin-bottom: -1px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
 }
 .spot-tab:hover {
-    background: var(--surface);
+    background: var(--surface-2);
     color: var(--text);
+    border-color: var(--text-dim);
+    transform: translateY(-1px);
 }
 .spot-tab.active {
-    background: var(--surface);
-    color: var(--accent);
-    border-bottom: 1px solid var(--surface);
-    font-weight: 600;
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(251, 191, 36, 0.25);
+    transform: translateY(-1px);
+}
+.spot-tab.active:hover {
+    background: var(--accent);
+    color: #000;
+    transform: translateY(-1px);
 }
 .spot-gran {
     display: flex;

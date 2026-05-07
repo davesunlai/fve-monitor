@@ -1,5 +1,5 @@
 {
-  "version": "0.74",
+  "version": "0.74.1",
   "buildDate": "2026-05-07",
-  "feature": "SPOT ceny + 15min cron ka\u017edou hodinu (sjednocen www-data)"
+  "feature": "Spot.php - zv\u00fdrazn\u011bn\u00e9 z\u00e1lo\u017eky (aktivn\u00ed = oran\u017eov\u00e1, neaktivn\u00ed = outline)"
 }
