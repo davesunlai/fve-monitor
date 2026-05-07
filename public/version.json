@@ -1,5 +1,5 @@
 {
-  "version": "0.74.2",
+  "version": "0.74.3",
   "buildDate": "2026-05-07",
-  "feature": "Fix: app.js console errors mimo dashboard (defensivn\u00ed null-checks)"
+  "feature": "sw.js: PHP str\u00e1nky network-first (fix cache probl\u00e9mu po p\u0159ekliknut\u00ed)"
 }

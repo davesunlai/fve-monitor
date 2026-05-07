@@ -1,5 +1,5 @@
 // FVE Monitor Service Worker
-const CACHE_NAME = '0.74.2' + Date.now();
+const CACHE_NAME = '0.74.3' + Date.now();
 const CORE_ASSETS = [
     '/',
     '/index.php',
@@ -60,7 +60,29 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Statické soubory: cache-first, síť fallback
+    // PHP stránky a HTML: NETWORK-FIRST (vždy zkus síť, fallback cache pro offline)
+    // Důvod: PHP stránky se mění při deploy, nesmíme servírovat starou verzi
+    const isPhpOrHtml = url.pathname.endsWith('.php')
+                      || url.pathname.endsWith('/')
+                      || url.pathname === ''
+                      || url.pathname.endsWith('.html');
+
+    if (isPhpOrHtml) {
+        event.respondWith(
+            fetch(event.request)
+                .then(resp => {
+                    if (event.request.method === 'GET' && resp.status === 200) {
+                        const clone = resp.clone();
+                        caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+                    }
+                    return resp;
+                })
+                .catch(() => caches.match(event.request))
+        );
+        return;
+    }
+
+    // Statické soubory (CSS, JS, obrázky, fonty): cache-first, síť fallback
     event.respondWith(
         caches.match(event.request).then(cached => {
             return cached || fetch(event.request).then(resp => {
