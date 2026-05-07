@@ -48,6 +48,7 @@ try {
         'weather_prediction'      => actionWeatherPrediction((int) ($_GET['plant'] ?? 0)),
         'weather_summary'         => actionWeatherSummary(),
         'spot_prices'             => actionSpotPrices($_GET['from'] ?? null, $_GET['to'] ?? null, $_GET['day'] ?? null, $_GET['granularity'] ?? 'hour'),
+        'spot_calculator'         => actionSpotCalculator(),
         default    => ['error' => 'Neznámá akce: ' . $action],
     };
     echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -881,4 +882,290 @@ function spot15Stats(array $rows, string $eurKey = 'price_avg_eur', string $czkK
         'max_czk' => round(max($czk), 2),
         'negative_periods' => $neg,
     ];
+}
+
+/**
+ * SPOT kalkulačka - rozpočítá měsíční spotřebu kWh přes TDD profil dne,
+ * spáruje s 15min/hodinovými cenami a spočítá kompletní fakturu.
+ *
+ * Parametry GET:
+ *   year, month       - období
+ *   tdd               - TDD třída (4-8)
+ *   tariff            - distribuční sazba (D02d, D25d, D45d, D57d...)
+ *   kwh_vt            - měsíční spotřeba ve vysokém tarifu (kWh)
+ *   kwh_nt            - měsíční spotřeba v nízkém tarifu (kWh) - pro 2-tarifní sazby
+ *   jistic            - jistič (např. "3x25")
+ *   tradefee          - poplatek za služby obchodu (Kč/MWh, default 482.79)
+ *   monthly_fee       - stálá platba obchodník (Kč/měsíc, default 154.88)
+ *   distrib_vt        - distribuce VT Kč/MWh
+ *   distrib_nt        - distribuce NT Kč/MWh (může být 0)
+ *   jistic_fee        - stálá platba za jistič Kč/měsíc
+ *   poze_kwh          - POZE Kč/MWh (default 598.95)
+ *   poze_a            - POZE Kč/A/měsíc (default 140.97)
+ *   poze_mode         - 'kwh' nebo 'jistic' (počítá se nižší)
+ *   include_dph       - 'yes'/'no' (default yes)
+ *
+ * Vrací: kompletní rozpis faktury + denní/hodinový profil spotřeby
+ */
+function actionSpotCalculator(): array
+{
+    // ─── Vstupní parametry ───
+    $year   = (int) ($_GET['year']  ?? date('Y'));
+    $month  = (int) ($_GET['month'] ?? date('n'));
+    $tdd    = (int) ($_GET['tdd']   ?? 4);
+    $tariff = $_GET['tariff'] ?? 'D02d';
+    $kwhVt  = (float) ($_GET['kwh_vt'] ?? 250);
+    $kwhNt  = (float) ($_GET['kwh_nt'] ?? 0);
+
+    // Obchodní část
+    $tradeFee   = (float) ($_GET['tradefee']    ?? 482.79);  // Kč/MWh s DPH
+    $monthlyFee = (float) ($_GET['monthly_fee'] ?? 154.88);  // Kč/měsíc s DPH
+
+    // Distribuce
+    $distribVt = (float) ($_GET['distrib_vt'] ?? 2515.08);  // Kč/MWh s DPH (D02d default)
+    $distribNt = (float) ($_GET['distrib_nt'] ?? 0);
+    $jisticFee = (float) ($_GET['jistic_fee'] ?? 309.76);   // Kč/měsíc s DPH (D02d 3x25A)
+
+    // POZE
+    $pozeKwh   = (float) ($_GET['poze_kwh']  ?? 598.95);
+    $pozeA     = (float) ($_GET['poze_a']    ?? 140.97);
+    $jisticA   = (int)   ($_GET['jistic_a']  ?? 25);
+    $jisticPh  = (int)   ($_GET['jistic_ph'] ?? 3);
+
+    // Pevné poplatky (vždy stejné)
+    $danElektrina = 34.24;   // Kč/MWh s DPH
+    $sysSluzby    = 198.73;  // Kč/MWh s DPH
+    $infraNesit   = 15.57;   // Kč/měsíc s DPH
+
+    // ─── Načti spotové ceny pro daný měsíc (15min preferováno, fallback na hour) ───
+    $periodFrom = sprintf('%04d-%02d-01', $year, $month);
+    $periodTo   = (new DateTimeImmutable($periodFrom))->modify('last day of this month')->format('Y-m-d');
+    $daysInMonth = (int) (new DateTimeImmutable($periodFrom))->format('t');
+
+    // Zkus 15min
+    $prices15 = \FveMonitor\Lib\Database::all(
+        "SELECT delivery_day, period, time_from, price_avg_czk
+         FROM spot_prices_15min WHERE delivery_day BETWEEN ? AND ? ORDER BY delivery_day, period",
+        [$periodFrom, $periodTo]
+    );
+    $useGranularity = '15min';
+    $expectedRows = $daysInMonth * 96;
+
+    // Spočítej kolik dnů v období je už uplynulo (kvůli budoucímu měsíci)
+    $today = date('Y-m-d');
+    $effectiveTo = ($periodTo > $today) ? $today : $periodTo;
+    $effectiveDays = (int) ((strtotime($effectiveTo) - strtotime($periodFrom)) / 86400) + 1;
+    $expectedAvailable = $effectiveDays * 96;
+
+    // Pokud chybí víc než 10% dostupných dat, fallback na hodinová
+    if (count($prices15) < $expectedAvailable * 0.9) {
+        $useGranularity = 'hour';
+        $pricesHour = \FveMonitor\Lib\Database::all(
+            "SELECT delivery_day, hour, price_czk_mwh AS price_avg_czk
+             FROM spot_prices WHERE delivery_day BETWEEN ? AND ? ORDER BY delivery_day, hour",
+            [$periodFrom, $periodTo]
+        );
+        $rawPrices = $pricesHour;
+    } else {
+        $rawPrices = $prices15;
+    }
+
+    if (empty($rawPrices)) {
+        return ['error' => 'Žádné spotové ceny pro období ' . $periodFrom . ' až ' . $periodTo];
+    }
+
+    // ─── TDD profil (zjednodušený - hodinové koeficienty 0-23) ───
+    // Suma všech 24 koeficientů = 1.0
+    $tddProfiles = getTddProfile();
+    $hourProfile = $tddProfiles[$tdd] ?? $tddProfiles[4];
+
+    // ─── Definice nízkého tarifu (NT) - kdy je sazba "lacinější" pásmo ───
+    // D02d = 1-tarif (vždy VT), D25d = 8h NT, D45d = 16h NT, D57d = 20h NT
+    $ntHours = getTariffNtHours($tariff);
+
+    // ─── Výpočet ───
+    $totalKwh = $kwhVt + $kwhNt;
+    if ($totalKwh <= 0) {
+        return ['error' => 'Spotřeba musí být kladná'];
+    }
+
+    // Sečti TDD koeficienty pro VT a NT hodiny → ratio
+    $coefVt = 0;
+    $coefNt = 0;
+    for ($h = 0; $h < 24; $h++) {
+        if (in_array($h, $ntHours, true)) {
+            $coefNt += $hourProfile[$h];
+        } else {
+            $coefVt += $hourProfile[$h];
+        }
+    }
+
+    // Pokud uživatel zadal jen kwh_vt (1tarif), rozdělíme ji ratio koeficientů
+    // Pokud zadal oba, použijeme jeho rozdělení ale uvnitř každého pásma necháme TDD
+    $useUserSplit = ($kwhNt > 0 && !empty($ntHours));
+
+    // ─── Iterace přes všechny 15min/hodinové bloky a součet nákladů ───
+    $silovaCelkem = 0;        // suma za silovou (spot + obchod) Kč
+    $kwhSpotreba = [];         // [day][hour][quarter] => kWh
+    $minPrice = PHP_FLOAT_MAX; $maxPrice = -PHP_FLOAT_MAX;
+    $negKwh = 0;              // kWh spotřebovaných v záporných cenách
+
+    foreach ($rawPrices as $row) {
+        $day = $row['delivery_day'];
+        $priceCzk = (float) $row['price_avg_czk'];
+
+        if ($useGranularity === '15min') {
+            $period = (int) $row['period'];
+            $hour = (int) (($period - 1) / 4);  // 1-4=hod 0, 5-8=hod 1, ...
+            $blockShare = 0.25;  // 1/4 hodiny
+        } else {
+            $hour = (int) $row['hour'];
+            $blockShare = 1.0;
+        }
+
+        // Spotřeba v tomto bloku:
+        // hodinová_spotřeba = (TDD_koef[hour] / suma_dnů_v_měsíci) × měsíční_spotřeba
+        // 15min_spotřeba = hodinová / 4
+        $isNt = in_array($hour, $ntHours, true);
+        if ($useUserSplit) {
+            $monthlyForThisBand = $isNt ? $kwhNt : $kwhVt;
+            $coefForThisBand = $isNt ? $coefNt : $coefVt;
+            $hourKwh = $coefForThisBand > 0
+                ? ($hourProfile[$hour] / $coefForThisBand) * $monthlyForThisBand / $daysInMonth
+                : 0;
+        } else {
+            // Bez rozdělení - všechno jako VT, distribuce se ale počítá zvlášť VT/NT
+            $hourKwh = $hourProfile[$hour] * $totalKwh / $daysInMonth;
+        }
+        $blockKwh = $hourKwh * $blockShare;
+
+        // Cena = (spot + poplatek_obchodu) × spotřeba
+        $silovaPriceMwh = $priceCzk + $tradeFee;
+        $silovaBlock = $silovaPriceMwh * $blockKwh / 1000;
+        $silovaCelkem += $silovaBlock;
+
+        if ($priceCzk < $minPrice) $minPrice = $priceCzk;
+        if ($priceCzk > $maxPrice) $maxPrice = $priceCzk;
+        if ($priceCzk < 0) $negKwh += $blockKwh;
+
+        $kwhSpotreba[$day][$hour] = ($kwhSpotreba[$day][$hour] ?? 0) + $blockKwh;
+    }
+
+    // ─── Distribuce + ostatní (nezávislé na hodinové ceně) ───
+    $distribVtKc = $distribVt * $kwhVt / 1000;
+    $distribNtKc = $distribNt * $kwhNt / 1000;
+    $danKc = $danElektrina * $totalKwh / 1000;
+    $sysKc = $sysSluzby * $totalKwh / 1000;
+
+    // POZE - počítá se nižší (kWh nebo per A)
+    $pozeKwhKc = $pozeKwh * $totalKwh / 1000;
+    $pozeAKc = $pozeA * $jisticA * $jisticPh;  // Kč/měsíc
+    $pozeFinal = min($pozeKwhKc, $pozeAKc);
+    $pozeMode = $pozeKwhKc < $pozeAKc ? 'kwh' : 'jistic';
+
+    // Stálé platby
+    $monthlyKc = $monthlyFee + $jisticFee + $infraNesit;
+
+    // Celkem
+    $celkem = $silovaCelkem + $distribVtKc + $distribNtKc + $danKc + $sysKc + $pozeFinal + $monthlyKc;
+    $avgPriceKwh = $totalKwh > 0 ? round($celkem / $totalKwh, 2) : 0;
+    $avgSpotKwh = $totalKwh > 0 ? round(1000 * $silovaCelkem / $totalKwh, 0) : 0;
+
+    return [
+        'period'        => sprintf('%04d-%02d', $year, $month),
+        'days_in_month' => $daysInMonth,
+        'granularity'   => $useGranularity,
+        'price_rows'    => count($rawPrices),
+        'inputs' => [
+            'tdd' => $tdd, 'tariff' => $tariff,
+            'kwh_vt' => $kwhVt, 'kwh_nt' => $kwhNt, 'total_kwh' => $totalKwh,
+            'jistic' => "{$jisticPh}×{$jisticA}A",
+        ],
+        'breakdown' => [
+            'silova_kc'    => round($silovaCelkem, 2),
+            'distrib_vt_kc' => round($distribVtKc, 2),
+            'distrib_nt_kc' => round($distribNtKc, 2),
+            'dan_kc'       => round($danKc, 2),
+            'sys_kc'       => round($sysKc, 2),
+            'poze_kc'      => round($pozeFinal, 2),
+            'poze_mode'    => $pozeMode,
+            'monthly_kc'   => round($monthlyKc, 2),
+            'celkem_kc'    => round($celkem, 2),
+        ],
+        'stats' => [
+            'avg_price_kwh' => $avgPriceKwh,        // Kč/kWh kompletní
+            'avg_spot_kwh'  => $avgSpotKwh / 1000,  // Kč/kWh jen silová
+            'min_spot_mwh'  => round($minPrice, 2),
+            'max_spot_mwh'  => round($maxPrice, 2),
+            'kwh_negative'  => round($negKwh, 2),
+        ],
+        'generated_at' => date('c'),
+    ];
+}
+
+/**
+ * Zjednodušené TDD profily - hodinové koeficienty 0-23, suma = 1.0
+ * Reálné OTE TDD jsou normalizované podle teploty + den v týdnu, tady použito pr~ %, jednoduše.
+ */
+function getTddProfile(): array
+{
+    return [
+        // TDD4 = bez vytápění, malý odběr (D01d, D02d - klasická domácnost)
+        4 => [
+            0.025, 0.020, 0.018, 0.018, 0.020, 0.025,  // 0-5 noc
+            0.035, 0.050, 0.055, 0.050, 0.045, 0.045,  // 6-11 ráno + dop.
+            0.045, 0.040, 0.040, 0.045, 0.055, 0.070,  // 12-17 odp.
+            0.080, 0.075, 0.060, 0.050, 0.040, 0.030,  // 18-23 večer
+        ],
+        // TDD5 = malý odběr 2-tarifní
+        5 => [
+            0.030, 0.025, 0.022, 0.022, 0.025, 0.030,
+            0.040, 0.055, 0.055, 0.045, 0.040, 0.040,
+            0.040, 0.035, 0.035, 0.040, 0.050, 0.065,
+            0.075, 0.070, 0.060, 0.050, 0.040, 0.032,
+        ],
+        // TDD6 = akumulační vytápění (D25d, D26d) - peak v noci
+        6 => [
+            0.090, 0.090, 0.090, 0.090, 0.090, 0.060,  // noc - akumulace
+            0.030, 0.030, 0.025, 0.020, 0.018, 0.015,
+            0.015, 0.015, 0.015, 0.018, 0.020, 0.030,
+            0.035, 0.035, 0.030, 0.025, 0.020, 0.014,
+        ],
+        // TDD7 = smíšené vytápění (D35d, D45d, D56d)
+        7 => [
+            0.060, 0.055, 0.050, 0.050, 0.050, 0.045,
+            0.040, 0.045, 0.045, 0.040, 0.035, 0.035,
+            0.035, 0.035, 0.035, 0.040, 0.045, 0.055,
+            0.060, 0.055, 0.050, 0.045, 0.040, 0.025,
+        ],
+        // TDD8 = přímotopné vytápění (D45d, D57d) - peak ráno + večer
+        8 => [
+            0.045, 0.045, 0.045, 0.045, 0.050, 0.055,
+            0.060, 0.065, 0.060, 0.045, 0.035, 0.035,
+            0.035, 0.035, 0.035, 0.040, 0.050, 0.060,
+            0.065, 0.060, 0.055, 0.050, 0.045, 0.035,
+        ],
+    ];
+}
+
+/**
+ * NT (nízký tarif) hodiny pro různé distribuční sazby - typický průběh
+ * D02d (jeden tarif) = []
+ * D25d (8h NT v noci) = 22-05
+ * D26d (8h NT pružný) = 22-05
+ * D45d (přímotop 16h NT) = většina dne
+ * D57d (elektr. topení 20h NT) = skoro vždy
+ */
+function getTariffNtHours(string $tariff): array
+{
+    return match (strtoupper($tariff)) {
+        'D02D'        => [],  // jednotarif
+        'D25D', 'D26D' => [22, 23, 0, 1, 2, 3, 4, 5],  // 8h v noci
+        'D27D'        => [0, 1, 2, 3, 4, 5, 6, 21, 22, 23],  // elektromobilita
+        'D45D'        => [0, 1, 2, 3, 4, 5, 6, 7, 8, 13, 14, 15, 19, 20, 21, 22, 23],  // 16h
+        'D56D', 'D35D' => [0, 1, 2, 3, 4, 5, 6, 13, 14, 15, 16, 21, 22, 23],
+        'D57D'        => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],  // 20h
+        'D61D'        => [],  // víkend - speciální (zde zjednodušení)
+        default       => [],
+    };
 }

@@ -17,6 +17,14 @@ if (!in_array($tab, ['today', 'tomorrow', 'history'], true)) $tab = 'today';
 $granularity = $_GET['gran'] ?? ($tab === 'history' ? 'hour' : '15min');
 if (!in_array($granularity, ['hour', '15min'], true)) $granularity = '15min';
 
+// Picker konkrétního dne (jen pro tab today/tomorrow - když user chce procházet)
+$selectedDay = $_GET['day'] ?? null;
+if ($selectedDay && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDay)) $selectedDay = null;
+
+// Datumové meze pro picker (15min: od 1.10.2024, hour: od 1.1.2024)
+$minDay = $granularity === '15min' ? '2024-10-01' : '2024-01-01';
+$maxDay = date('Y-m-d', strtotime('+1 day'));
+
 $pageTitle    = 'Spotové ceny — FVE Monitor';
 $pageHeading  = '⚡ Spotové ceny elektřiny';
 $activePage   = 'spot';
@@ -40,6 +48,35 @@ require __DIR__ . '/_app_head.php';
         </div>
         <span class="spot-source">Zdroj: OTE-CR <?= $granularity === '15min' ? 'vnitrodenní trh (VDT)' : 'denní trh (DT)' ?> · kurz ČNB</span>
     </div>
+
+    <?php if ($tab !== 'history'): ?>
+    <!-- Picker dne -->
+    <div class="day-picker">
+        <?php
+        $current = $selectedDay ?: ($tab === 'tomorrow' ? date('Y-m-d', strtotime('+1 day')) : date('Y-m-d'));
+        $prev = date('Y-m-d', strtotime($current . ' -1 day'));
+        $next = date('Y-m-d', strtotime($current . ' +1 day'));
+        $isToday = $current === date('Y-m-d');
+        $isTomorrow = $current === date('Y-m-d', strtotime('+1 day'));
+        $weekday = ['neděle','pondělí','úterý','středa','čtvrtek','pátek','sobota'][(int)date('w', strtotime($current))];
+        ?>
+        <a href="?tab=<?= $tab ?>&gran=<?= $granularity ?>&day=<?= $prev ?>" class="day-nav" title="Předchozí den">‹</a>
+
+        <div class="day-current">
+            <input type="date" id="day-input" value="<?= htmlspecialchars($current) ?>"
+                   min="<?= $minDay ?>" max="<?= $maxDay ?>"
+                   onchange="window.location.href='?tab=<?= $tab ?>&gran=<?= $granularity ?>&day=' + this.value">
+            <span class="day-meta"><?= $weekday ?> · <?= date('j.n.Y', strtotime($current)) ?></span>
+        </div>
+
+        <a href="?tab=<?= $tab ?>&gran=<?= $granularity ?>&day=<?= $next ?>" class="day-nav" title="Následující den">›</a>
+
+        <div class="day-shortcuts">
+            <a href="?tab=today&gran=<?= $granularity ?>" class="day-quick <?= $isToday ? 'active' : '' ?>">Dnes</a>
+            <a href="?tab=tomorrow&gran=<?= $granularity ?>" class="day-quick <?= $isTomorrow ? 'active' : '' ?>">Zítra</a>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- Statistiky karty -->
     <div id="stats-cards" class="stats-grid"></div>
@@ -155,6 +192,81 @@ require __DIR__ . '/_app_head.php';
     padding: 0 8px 8px;
 }
 
+.day-picker {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 0.6rem 0.8rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    flex-wrap: wrap;
+}
+.day-nav {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-2);
+    color: var(--text);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 1.4rem;
+    font-weight: 600;
+    transition: all 0.15s;
+}
+.day-nav:hover {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+}
+.day-current {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 180px;
+}
+.day-current input[type="date"] {
+    padding: 6px 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color-scheme: dark;
+}
+.day-meta {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    padding-left: 4px;
+}
+.day-shortcuts {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+.day-quick {
+    padding: 6px 12px;
+    background: var(--surface-2);
+    color: var(--text-dim);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    transition: all 0.15s;
+}
+.day-quick:hover { color: var(--text); }
+.day-quick.active {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -247,6 +359,7 @@ const TAB = <?= json_encode($tab) ?>;
 const FROM = <?= json_encode($_GET['from'] ?? null) ?>;
 const TO = <?= json_encode($_GET['to'] ?? null) ?>;
 const GRAN = <?= json_encode($granularity) ?>;
+const SELECTED_DAY = <?= json_encode($selectedDay) ?>;
 
 // ─── Helpery ───
 const fmt = (v, dec = 2) => {
@@ -564,10 +677,24 @@ async function loadData() {
         if (TAB === 'history') {
             url += '&from=' + (FROM || new Date(Date.now() - 30*86400000).toISOString().slice(0,10))
                  + '&to=' + (TO || new Date().toISOString().slice(0,10));
+        } else if (SELECTED_DAY) {
+            // Picker - konkrétní den
+            url += '&day=' + SELECTED_DAY;
         }
 
         const r = await fetch(url);
         const data = await r.json();
+
+        // Pokud máme konkrétní den (mode=day nebo day_15min), zobraz ho jako "today"
+        if (data.mode === 'day' || data.mode === 'day_15min') {
+            const rawRows = data.hours || data.periods || [];
+            const rows = normalizeRows(rawRows, GRAN);
+            renderStats(data.stats, '· ' + fmtDate(data.day));
+            const titlePart = GRAN === '15min' ? '15min ceny' : 'Hodinové ceny';
+            renderHourlyChart(rows, `${titlePart} — ${fmtDate(data.day)}`);
+            renderHourlyTable(rows, `Tabulka cen — ${fmtDate(data.day)}`);
+            return;
+        }
 
         if (TAB === 'today') {
             const rows = normalizeRows(data.today || [], GRAN);

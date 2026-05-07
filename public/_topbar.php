@@ -55,6 +55,11 @@ $currentUser   = \FveMonitor\Lib\Auth::currentUser();
             <span class="menu-label">Spotové ceny</span>
         </a>
 
+        <a href="spot_calc.php" class="menu-item <?= $activePage === 'spot_calc' ? 'menu-item-active' : '' ?>">
+            <span class="menu-icon">🧮</span>
+            <span class="menu-label">SPOT kalkulačka</span>
+        </a>
+
         <?php if ($showLiveStats): ?>
             <button id="push-toggle" class="menu-item" style="display:none">
                 <span class="menu-icon">🔔</span>
