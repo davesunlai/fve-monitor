@@ -102,53 +102,91 @@ def fetch_ote_15min(d: date) -> list[dict] | None:
 
 
 def upsert_rows(d: date, rows: list[dict], rate: float | None) -> int:
-    """Hromadný UPSERT přes mysql CLI (heredoc)."""
+    """Hromadný UPSERT přes PHP/PDO (čte kredenciály z config.php)."""
     if not rows:
         return 0
 
-    sql_lines = []
-    for r in rows:
-        czk_avg = round(r['price_avg'] * rate, 2) if r['price_avg'] is not None and rate else 'NULL'
-        czk_min = round(r['price_min'] * rate, 2) if r['price_min'] is not None and rate else 'NULL'
-        czk_max = round(r['price_max'] * rate, 2) if r['price_max'] is not None and rate else 'NULL'
+    # Sestavíme JSON s daty a předáme do PHP scriptu, který udělá UPSERT
+    import json
+    payload = {
+        'day': str(d),
+        'rate': rate,
+        'rows': [
+            {
+                'period': r['period'],
+                'time_from': r['time_from'] + ':00',
+                'volume': r['volume'],
+                'price_avg': r['price_avg'],
+                'price_min': r['price_min'],
+                'price_max': r['price_max'],
+                'price_last': r['price_last'],
+            } for r in rows
+        ]
+    }
 
-        def fmt(v):
-            return 'NULL' if v is None else f"{v:.4f}"
+    php_script = """<?php
+declare(strict_types=1);
+require __DIR__ . '/../bootstrap.php';
+use FveMonitor\\Lib\\Database;
 
-        sql_lines.append(
-            f"('{d}', {r['period']}, '{r['time_from']}:00', "
-            f"{fmt(r['volume'])}, {fmt(r['price_avg'])}, {fmt(r['price_min'])}, "
-            f"{fmt(r['price_max'])}, {fmt(r['price_last'])}, "
-            f"{czk_avg}, {czk_min}, {czk_max}, "
-            f"{fmt(rate)})"
-        )
+$payload = json_decode(file_get_contents('php://stdin'), true);
+if (!$payload) { fwrite(STDERR, 'invalid JSON'); exit(1); }
 
-    sql = (
-        "INSERT INTO spot_prices_15min "
-        "(delivery_day, period, time_from, volume_mwh, "
-        "price_avg_eur, price_min_eur, price_max_eur, price_last_eur, "
-        "price_avg_czk, price_min_czk, price_max_czk, eur_czk_rate) VALUES\n"
-        + ",\n".join(sql_lines)
-        + "\nON DUPLICATE KEY UPDATE "
-          "volume_mwh=VALUES(volume_mwh), "
-          "price_avg_eur=VALUES(price_avg_eur), "
-          "price_min_eur=VALUES(price_min_eur), "
-          "price_max_eur=VALUES(price_max_eur), "
-          "price_last_eur=VALUES(price_last_eur), "
-          "price_avg_czk=VALUES(price_avg_czk), "
-          "price_min_czk=VALUES(price_min_czk), "
-          "price_max_czk=VALUES(price_max_czk), "
-          "eur_czk_rate=VALUES(eur_czk_rate);"
-    )
+$pdo = Database::pdo();
+$stmt = $pdo->prepare(
+    'INSERT INTO spot_prices_15min
+     (delivery_day, period, time_from, volume_mwh,
+      price_avg_eur, price_min_eur, price_max_eur, price_last_eur,
+      price_avg_czk, price_min_czk, price_max_czk, eur_czk_rate)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+     ON DUPLICATE KEY UPDATE
+        volume_mwh=VALUES(volume_mwh),
+        price_avg_eur=VALUES(price_avg_eur),
+        price_min_eur=VALUES(price_min_eur),
+        price_max_eur=VALUES(price_max_eur),
+        price_last_eur=VALUES(price_last_eur),
+        price_avg_czk=VALUES(price_avg_czk),
+        price_min_czk=VALUES(price_min_czk),
+        price_max_czk=VALUES(price_max_czk),
+        eur_czk_rate=VALUES(eur_czk_rate)'
+);
+
+$rate = $payload['rate'];
+$day = $payload['day'];
+$count = 0;
+foreach ($payload['rows'] as $r) {
+    $czkAvg = ($r['price_avg'] !== null && $rate) ? round($r['price_avg'] * $rate, 2) : null;
+    $czkMin = ($r['price_min'] !== null && $rate) ? round($r['price_min'] * $rate, 2) : null;
+    $czkMax = ($r['price_max'] !== null && $rate) ? round($r['price_max'] * $rate, 2) : null;
+    $stmt->execute([
+        $day, $r['period'], $r['time_from'],
+        $r['volume'], $r['price_avg'], $r['price_min'], $r['price_max'], $r['price_last'],
+        $czkAvg, $czkMin, $czkMax, $rate
+    ]);
+    $count++;
+}
+echo $count;
+"""
+
+    # Spustíme PHP script s JSON na stdin
+    import os
+    php_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_upsert_15min.php')
+    if not os.path.exists(php_path):
+        with open(php_path, 'w') as f:
+            f.write(php_script)
 
     result = subprocess.run(
-        ['mysql', 'fve_monitor'],
-        input=sql, capture_output=True, text=True
+        ['php', php_path],
+        input=json.dumps(payload), capture_output=True, text=True
     )
     if result.returncode != 0:
-        print(f"  ✗ MySQL chyba: {result.stderr.strip()[:200]}")
+        print(f"  ✗ PHP chyba: {result.stderr.strip()[:300]}")
         return 0
-    return len(rows)
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        print(f"  ✗ neočekávaný výstup: {result.stdout[:100]}")
+        return 0
 
 
 # ────────────────────────────────────────────────
