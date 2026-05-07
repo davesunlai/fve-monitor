@@ -82,11 +82,21 @@ function renderWeatherCell(plantId) {
 let activePlantId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadSummary();
-    loadAlerts();
-    setInterval(loadSummary, REFRESH_MS);
-    setInterval(loadAlerts, REFRESH_MS);
-    document.getElementById('detail-close').addEventListener('click', closeDetail);
+    // Dashboard funkce - běží jen pokud je na stránce dashboard tabulka
+    if (document.getElementById('plants-tbody')) {
+        loadSummary();
+        setInterval(loadSummary, REFRESH_MS);
+    }
+    // Alerts badge - běží na každé stránce kde je #alert-badge (topbar)
+    if (document.getElementById('alert-badge')) {
+        loadAlerts();
+        setInterval(loadAlerts, REFRESH_MS);
+    }
+    // Detail modal close - jen pokud existuje (dashboard)
+    const detailClose = document.getElementById('detail-close');
+    if (detailClose) {
+        detailClose.addEventListener('click', closeDetail);
+    }
 });
 
 async function loadSummary() {
@@ -110,8 +120,10 @@ async function loadSummary() {
         }
     } catch (e) {
         console.error('Summary chyba:', e);
-        document.getElementById('plants-tbody').innerHTML =
-            `<tr><td colspan="10" class="loading">Chyba: ${escapeHtml(e.message)}</td></tr>`;
+        const tbody = document.getElementById('plants-tbody');
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="10" class="loading">Chyba: ${escapeHtml(e.message)}</td></tr>`;
+        }
     }
 }
 
@@ -741,6 +753,7 @@ async function loadAlerts() {
 
 function renderAlerts(alerts) {
     const list = document.getElementById('alerts-list');
+    if (!list) return;  // alerts-list je jen na dashboardu
     if (!alerts.length) {
         list.innerHTML = '<li class="empty">Žádná aktivní upozornění.</li>';
         return;
