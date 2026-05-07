@@ -81,13 +81,21 @@ class SolarEdgeProvider implements ProviderInterface
         // lastDayData.energy je ve Wh, převedeme na kWh
         $energyTodayWh = (float) ($ov['lastDayData']['energy'] ?? 0);
 
-        // lastUpdateTime format: "2024-04-21 08:30:00"
+        // lastUpdateTime format: "2024-04-21 08:30:00" (v site timezone)
         $ts = $ov['lastUpdateTime'] ?? date('Y-m-d H:i:s');
+
+        // Ochrana proti zamrzlým snapshotům - pokud měnič nehlásil > 30 min,
+        // SolarEdge stále vrací poslední známý currentPower (i 9 dní starý).
+        // V takovém případě FVE považujeme za offline a power_kw = 0.
+        $ageSeconds = time() - strtotime($ts);
+        $isStale = $ageSeconds > 1800;  // 30 min
 
         return [
             'ts'               => $ts,
-            'power_kw'         => round($powerW / 1000.0, 3),
+            'power_kw'         => $isStale ? 0.0 : round($powerW / 1000.0, 3),
             'energy_kwh_today' => round($energyTodayWh / 1000.0, 3),
+            'is_stale'         => $isStale,
+            'age_seconds'      => $ageSeconds,
         ];
     }
 

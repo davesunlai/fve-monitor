@@ -1,5 +1,5 @@
 {
-  "version": "0.72",
+  "version": "0.73",
   "buildDate": "2026-05-07",
-  "feature": "SPOT kalkula\u010dka - TDD profil + kompletn\u00ed faktura (silov\u00e1+distribuce+POZE+st\u00e1l\u00e9)"
+  "feature": "SolarEdge integrace - Albert Česká Lípa migrována z mock"
 }

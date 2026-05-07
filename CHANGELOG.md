@@ -1,6 +1,21 @@
 # CHANGELOG
 
-
+## v0.73 — 2026-05-07 — SolarEdge integrace
+### Přidáno
+- 🔌 **Albert Česká Lípa (Monkstone)** migrována z `mock` na `solaredge`
+  - API key + Site ID 4476453 v `config/config.php`
+  - `peak_power_kwp` srovnán z 365.76 → 365.28 (dle SolarEdge portálu)
+- 📥 Import historie za posledních 30 dní (22 dní reálné výroby + 9 dní výpadku)
+- 🛡️ **Staleness ochrana** v `SolarEdgeProvider::getRealtime()`:
+  - SolarEdge `/overview.currentPower` vrací poslední známou hodnotu i při dlouhodobém výpadku měniče
+  - Pokud `lastUpdateTime` > 30 min staré → `power_kw = 0` (FVE offline)
+  - Návratová hodnota nově obsahuje `is_stale` + `age_seconds` pro debug
+### Cleanup
+- Smazány mock data pro plant_id=12 (734 realtime + 16 daily záznamů)
+### TODO
+- Doplnit do `Predictor::evaluateProviderAlarms()` čtení SolarEdge `alertQuantity`
+- Aktuálně FVE hlásí `alertQuantity: 1, highestImpact: 4` (kritický výpadek od 28.4.)
+---
 ## v0.68 — 2026-05-05
 
 **comparison.php — popisky v hlavičce tabulky**
