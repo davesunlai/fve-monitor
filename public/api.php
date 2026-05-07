@@ -47,6 +47,7 @@ try {
         'passkey_delete'          => actionPasskeyDelete((int) ($_GET['id'] ?? 0)),
         'weather_prediction'      => actionWeatherPrediction((int) ($_GET['plant'] ?? 0)),
         'weather_summary'         => actionWeatherSummary(),
+        'spot_prices'             => actionSpotPrices($_GET['from'] ?? null, $_GET['to'] ?? null, $_GET['day'] ?? null),
         default    => ['error' => 'Neznámá akce: ' . $action],
     };
     echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -653,3 +654,113 @@ function actionWeatherSummary(): array
     return ['plants' => $result, 'generated_at' => date('c')];
 }
 
+
+/**
+ * Spotové ceny OTE.
+ *   ?action=spot_prices                          — dnes + zítra (default)
+ *   ?action=spot_prices&day=2026-05-07           — konkrétní den (24 hodin)
+ *   ?action=spot_prices&from=2026-04-01&to=2026-04-30  — rozsah (denní průměry)
+ */
+function actionSpotPrices(?string $from, ?string $to, ?string $day): array
+{
+    // Validace formátu data
+    $isDate = fn($s) => $s && preg_match('/^\d{4}-\d{2}-\d{2}$/', $s);
+
+    // 1) Konkrétní den → 24 hodin
+    if ($isDate($day)) {
+        $rows = \FveMonitor\Lib\Database::all(
+            "SELECT delivery_day, hour, price_eur_mwh, price_czk_mwh, eur_czk_rate
+             FROM spot_prices WHERE delivery_day = ? ORDER BY hour",
+            [$day]
+        );
+        return [
+            'mode'       => 'day',
+            'day'        => $day,
+            'hours'      => $rows,
+            'stats'      => spotStats($rows),
+            'generated_at' => date('c'),
+        ];
+    }
+
+    // 2) Rozsah → denní agregát (min/avg/max za den)
+    if ($isDate($from) && $isDate($to)) {
+        $daily = \FveMonitor\Lib\Database::all(
+            "SELECT delivery_day,
+                    ROUND(MIN(price_eur_mwh),2) AS min_eur,
+                    ROUND(AVG(price_eur_mwh),2) AS avg_eur,
+                    ROUND(MAX(price_eur_mwh),2) AS max_eur,
+                    ROUND(MIN(price_czk_mwh),2) AS min_czk,
+                    ROUND(AVG(price_czk_mwh),2) AS avg_czk,
+                    ROUND(MAX(price_czk_mwh),2) AS max_czk,
+                    COUNT(*) AS hours
+             FROM spot_prices
+             WHERE delivery_day BETWEEN ? AND ?
+             GROUP BY delivery_day
+             ORDER BY delivery_day",
+            [$from, $to]
+        );
+
+        // Celková statistika za rozsah
+        $all = \FveMonitor\Lib\Database::all(
+            "SELECT price_eur_mwh, price_czk_mwh FROM spot_prices
+             WHERE delivery_day BETWEEN ? AND ?",
+            [$from, $to]
+        );
+
+        return [
+            'mode'  => 'range',
+            'from'  => $from,
+            'to'    => $to,
+            'days'  => $daily,
+            'stats' => spotStats($all),
+            'generated_at' => date('c'),
+        ];
+    }
+
+    // 3) Default: dnes + zítra (po hodinách)
+    $today    = date('Y-m-d');
+    $tomorrow = date('Y-m-d', strtotime('+1 day'));
+
+    $rows = \FveMonitor\Lib\Database::all(
+        "SELECT delivery_day, hour, price_eur_mwh, price_czk_mwh, eur_czk_rate
+         FROM spot_prices WHERE delivery_day IN (?, ?) ORDER BY delivery_day, hour",
+        [$today, $tomorrow]
+    );
+
+    $byDay = ['today' => [], 'tomorrow' => []];
+    foreach ($rows as $r) {
+        $key = ($r['delivery_day'] === $today) ? 'today' : 'tomorrow';
+        $byDay[$key][] = $r;
+    }
+
+    return [
+        'mode'           => 'today_tomorrow',
+        'today_date'     => $today,
+        'tomorrow_date'  => $tomorrow,
+        'today'          => $byDay['today'],
+        'tomorrow'       => $byDay['tomorrow'],
+        'today_stats'    => spotStats($byDay['today']),
+        'tomorrow_stats' => spotStats($byDay['tomorrow']),
+        'tomorrow_available' => count($byDay['tomorrow']) > 0,
+        'generated_at'   => date('c'),
+    ];
+}
+
+function spotStats(array $rows): array
+{
+    if (empty($rows)) {
+        return ['count' => 0, 'min_eur' => null, 'avg_eur' => null, 'max_eur' => null,
+                'min_czk' => null, 'avg_czk' => null, 'max_czk' => null];
+    }
+    $eur = array_map(fn($r) => (float) $r['price_eur_mwh'], $rows);
+    $czk = array_map(fn($r) => (float) ($r['price_czk_mwh'] ?? 0), $rows);
+    return [
+        'count'   => count($rows),
+        'min_eur' => round(min($eur), 2),
+        'avg_eur' => round(array_sum($eur) / count($eur), 2),
+        'max_eur' => round(max($eur), 2),
+        'min_czk' => round(min($czk), 2),
+        'avg_czk' => round(array_sum($czk) / count($czk), 2),
+        'max_czk' => round(max($czk), 2),
+    ];
+}

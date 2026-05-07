@@ -1,5 +1,5 @@
 {
-  "version": "0.68",
-  "buildDate": "2026-05-05",
-  "feature": "comparison.php – popisky v hlavičce tabulky (Den, Ø všech, FVE sloupce s jednotkou kWh/kWp/den)"
+  "version": "0.69.1",
+  "buildDate": "2026-05-07",
+  "feature": "Spotov\u00e9 ceny - K\u010d jako prim\u00e1rn\u00ed jednotka (graf, tabulka, statistiky)"
 }

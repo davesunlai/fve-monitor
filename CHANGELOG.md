@@ -184,3 +184,28 @@
 
 ### Opraveno
 - 🔐 Přesměrování na login pro neautorizované přístupy na comparison.php a performance.php
+
+---
+
+## v0.69 — 2026-05-07 — Spotové ceny OTE
+
+### Přidáno
+- ⚡ **Nová stránka `/spot.php`** — spotové ceny elektřiny z OTE-CR denního trhu
+  - 3 záložky: **Dnes**, **Zítra**, **Historie**
+  - Hodinový sloupcový graf (EUR/MWh) s barevným rozlišením (záporné=zelené, vysoké=červené)
+  - Tabulka s EUR/MWh, Kč/MWh, Kč/kWh + zvýraznění min/max
+  - Stat karty: Min / Ø / Max + počet vzorků
+  - Historie: liniový graf (min/avg/max), filtr od-do, quick range (7/30/90 dní, YTD, vše)
+- 📊 **DB tabulka `spot_prices`** — (delivery_day, hour) PK, EUR + CZK přepočet, ČNB kurz
+- 🔄 **Cron `fetch_spot_prices.php`** — stahuje denní ceny + ČNB kurz
+  - 14:30 a 15:30 denně (po publikaci D+1 fixingu)
+  - Backfilled 854 dnů od 2024-01-01
+  - Default: D + D+1 · podpora rozsahu pro backfill
+- 🔌 **API endpoint `?action=spot_prices`** — 3 režimy: dnes+zítra (default), `&day=`, `&from=&to=`
+- 🍔 **Menu položka** v _topbar.php (⚡ Spotové ceny)
+
+### Technické
+- Zdroj: `https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh/@@chart-data?report_date=YYYY-MM-DD`
+- Kurz: ČNB denní fixing (`denni_kurz.txt?date=DD.MM.YYYY`)
+- Podpora DST přechodů (23h dny v březnu)
+- Chybí 1 den v historii: 2025-07-04 (OTE výpadek)

@@ -50,6 +50,11 @@ $currentUser   = \FveMonitor\Lib\Auth::currentUser();
             <span class="menu-label">Plnění FVE (vs PVGIS)</span>
         </a>
 
+        <a href="spot.php" class="menu-item <?= $activePage === 'spot' ? 'menu-item-active' : '' ?>">
+            <span class="menu-icon">⚡</span>
+            <span class="menu-label">Spotové ceny</span>
+        </a>
+
         <?php if ($showLiveStats): ?>
             <button id="push-toggle" class="menu-item" style="display:none">
                 <span class="menu-icon">🔔</span>
