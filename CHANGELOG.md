@@ -1,5 +1,42 @@
 # CHANGELOG
 
+## v0.74 — 2026-05-07 — Spotové ceny OTE + SPOT kalkulačka
+
+### Přidáno
+- ⚡ **Stránka `/spot.php`** — spotové ceny OTE (denní trh + vnitrodenní 15min VDT)
+  - 3 záložky: Dnes / Zítra / Historie + picker dne (← →)
+  - Přepínač granularity: 1 hod (DT) ↔ 15 min (VDT)
+  - Sloupcový graf 96 period · barevné rozlišení (záporné=zelené, vysoké=červené)
+  - Tabulka s Kč/kWh, Kč/MWh, EUR/MWh + min/max/objem
+  - Statistiky min/avg/max + počet záporných period
+- 🧮 **Stránka `/spot_calc.php`** — SPOT kalkulačka kompletní faktury
+  - TDD profil (TDD4-8) podle distribuční sazby
+  - Defaulty pro D02d/D25d/D45d/D57d/D61d (z ceníku ČEZ Prodej 2026)
+  - Detailní rozpis: silová + distribuce VT/NT + POZE + sys + daň + stálé
+  - Předvyplněno pro D57d Kopřivnice (3×25A, 1500 kWh, elektrické topení)
+- 🔌 **API endpointy:**
+  - `?action=spot_prices&granularity=hour|15min` (dnes+zítra/den/rozsah)
+  - `?action=spot_calculator` (rok, měsíc, sazba, TDD, spotřeba VT/NT)
+
+### DB schema
+- 📊 `spot_prices` — hodinové, PK (delivery_day, hour), 855 dnů od 2024-01-01
+- 📊 `spot_prices_15min` — 15min, PK (delivery_day, period), 506 dnů od 2024-12-17
+- Backfill přes XLSX OTE-CR (`pubweb/attachments/27/YYYY/monthMM/dayDD/VDT_15MIN_*.xlsx`)
+- ČNB denní fixing kurz EUR/CZK
+
+### Cron
+- `30 14,15 * * *` — `fetch_spot_prices.php` (hodinové DT)
+- `5 8-23 * * *` — `fetch_spot_prices_15min.py` (15min VDT každou hodinu)
+- Sjednoceno: všechny FVE crony běží jako `www-data`
+- 15min upsert přes PHP/PDO helper (`cron/_upsert_15min.php`)
+
+### Technické
+- Zdroj DT: `https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh/@@chart-data`
+- Zdroj VDT: XLSX feed z OTE pubweb (96 period × 9 sloupců)
+- Podpora DST přechodů (23h dny v březnu)
+
+---
+
 ## v0.73 — 2026-05-07 — SolarEdge integrace
 ### Přidáno
 - 🔌 **Albert Česká Lípa (Monkstone)** migrována z `mock` na `solaredge`

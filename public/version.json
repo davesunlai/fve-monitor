@@ -1,5 +1,5 @@
 {
-  "version": "0.73",
+  "version": "0.74",
   "buildDate": "2026-05-07",
-  "feature": "SolarEdge integrace - Albert Česká Lípa migrována z mock"
+  "feature": "SPOT ceny + 15min cron ka\u017edou hodinu (sjednocen www-data)"
 }
