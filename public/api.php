@@ -672,6 +672,16 @@ function actionSpotPrices(?string $from, ?string $to, ?string $day, string $gran
         return actionSpotPrices15min($from, $to, $day, $isDate);
     }
 
+    // ─── DT 15min predikce z denní aukce ───
+    if ($granularity === 'dt15min') {
+        return actionSpotPricesDt15min($from, $to, $day, $isDate);
+    }
+
+    // ─── Compare: DT predikce vs VDT realita ───
+    if ($granularity === 'compare') {
+        return actionSpotPricesCompare($from, $to, $day, $isDate);
+    }
+
     // 1) Konkrétní den → 24 hodin
     if ($isDate($day)) {
         $rows = \FveMonitor\Lib\Database::all(
@@ -1168,4 +1178,193 @@ function getTariffNtHours(string $tariff): array
         'D61D'        => [],  // víkend - speciální (zde zjednodušení)
         default       => [],
     };
+}
+
+/**
+ * DT 15min predikce - z denní aukce, publikováno D-1 v 14:00
+ *   ?action=spot_prices&granularity=dt15min                    — dnes + zítra + pozítří
+ *   ?action=spot_prices&granularity=dt15min&day=2026-05-09     — konkrétní den
+ *   ?action=spot_prices&granularity=dt15min&from=A&to=B        — rozsah
+ */
+function actionSpotPricesDt15min(?string $from, ?string $to, ?string $day, callable $isDate): array
+{
+    if ($isDate($day)) {
+        $rows = \FveMonitor\Lib\Database::all(
+            "SELECT delivery_day, period, time_from,
+                    price_15min_eur, price_60min_eur,
+                    price_15min_czk, price_60min_czk,
+                    volume_mwh, saldo_mwh, eur_czk_rate
+             FROM spot_prices_dt15min WHERE delivery_day = ? ORDER BY period",
+            [$day]
+        );
+        return [
+            'mode'         => 'day_dt15min',
+            'granularity'  => 'dt15min',
+            'day'          => $day,
+            'periods'      => $rows,
+            'stats'        => spotDt15Stats($rows),
+            'generated_at' => date('c'),
+        ];
+    }
+
+    if ($isDate($from) && $isDate($to)) {
+        $daily = \FveMonitor\Lib\Database::all(
+            "SELECT delivery_day,
+                    ROUND(MIN(price_15min_eur),2) AS min_eur,
+                    ROUND(AVG(price_15min_eur),2) AS avg_eur,
+                    ROUND(MAX(price_15min_eur),2) AS max_eur,
+                    ROUND(MIN(price_15min_czk),2) AS min_czk,
+                    ROUND(AVG(price_15min_czk),2) AS avg_czk,
+                    ROUND(MAX(price_15min_czk),2) AS max_czk,
+                    SUM(CASE WHEN price_15min_eur < 0 THEN 1 ELSE 0 END) AS negative_periods,
+                    COUNT(*) AS periods
+             FROM spot_prices_dt15min
+             WHERE delivery_day BETWEEN ? AND ?
+             GROUP BY delivery_day
+             ORDER BY delivery_day",
+            [$from, $to]
+        );
+        $all = \FveMonitor\Lib\Database::all(
+            "SELECT price_15min_eur AS p_eur, price_15min_czk AS p_czk
+             FROM spot_prices_dt15min WHERE delivery_day BETWEEN ? AND ?",
+            [$from, $to]
+        );
+        return [
+            'mode'         => 'range_dt15min',
+            'granularity'  => 'dt15min',
+            'from'         => $from,
+            'to'           => $to,
+            'days'         => $daily,
+            'stats'        => spotDt15Stats($all, 'p_eur', 'p_czk'),
+            'generated_at' => date('c'),
+        ];
+    }
+
+    // Default: dnes + zítra + pozítří
+    $today    = date('Y-m-d');
+    $tomorrow = date('Y-m-d', strtotime('+1 day'));
+    $dayAfter = date('Y-m-d', strtotime('+2 days'));
+
+    $rows = \FveMonitor\Lib\Database::all(
+        "SELECT delivery_day, period, time_from,
+                price_15min_eur, price_60min_eur,
+                price_15min_czk, price_60min_czk,
+                volume_mwh, saldo_mwh, eur_czk_rate
+         FROM spot_prices_dt15min WHERE delivery_day IN (?, ?, ?) ORDER BY delivery_day, period",
+        [$today, $tomorrow, $dayAfter]
+    );
+    $byDay = ['today' => [], 'tomorrow' => [], 'day_after' => []];
+    foreach ($rows as $r) {
+        if ($r['delivery_day'] === $today) $byDay['today'][] = $r;
+        elseif ($r['delivery_day'] === $tomorrow) $byDay['tomorrow'][] = $r;
+        else $byDay['day_after'][] = $r;
+    }
+
+    return [
+        'mode'                => 'multi_day_dt15min',
+        'granularity'         => 'dt15min',
+        'today_date'          => $today,
+        'tomorrow_date'       => $tomorrow,
+        'day_after_date'      => $dayAfter,
+        'today'               => $byDay['today'],
+        'tomorrow'            => $byDay['tomorrow'],
+        'day_after'           => $byDay['day_after'],
+        'today_stats'         => spotDt15Stats($byDay['today']),
+        'tomorrow_stats'      => spotDt15Stats($byDay['tomorrow']),
+        'day_after_stats'     => spotDt15Stats($byDay['day_after']),
+        'tomorrow_available'  => count($byDay['tomorrow']) > 0,
+        'day_after_available' => count($byDay['day_after']) > 0,
+        'generated_at'        => date('c'),
+    ];
+}
+
+/**
+ * Compare: DT 15min predikce vs VDT 15min realita - per period
+ *   ?action=spot_prices&granularity=compare&day=2026-05-08
+ *   Výchozí = dnešek
+ */
+function actionSpotPricesCompare(?string $from, ?string $to, ?string $day, callable $isDate): array
+{
+    if (!$isDate($day)) {
+        $day = date('Y-m-d');
+    }
+
+    $rows = \FveMonitor\Lib\Database::all(
+        "SELECT
+            dt.period, dt.time_from,
+            dt.price_15min_eur AS dt_eur,
+            dt.price_15min_czk AS dt_czk,
+            vdt.price_avg_eur AS vdt_eur,
+            vdt.price_avg_czk AS vdt_czk,
+            vdt.volume_mwh AS vdt_volume,
+            ROUND(vdt.price_avg_eur - dt.price_15min_eur, 2) AS diff_eur,
+            ROUND(vdt.price_avg_czk - dt.price_15min_czk, 2) AS diff_czk,
+            CASE
+              WHEN dt.price_15min_eur IS NOT NULL AND vdt.price_avg_eur IS NOT NULL AND dt.price_15min_eur != 0
+              THEN ROUND(100 * (vdt.price_avg_eur - dt.price_15min_eur) / dt.price_15min_eur, 1)
+              ELSE NULL
+            END AS diff_pct
+         FROM spot_prices_dt15min dt
+         LEFT JOIN spot_prices_15min vdt
+           ON vdt.delivery_day = dt.delivery_day AND vdt.period = dt.period
+         WHERE dt.delivery_day = ?
+         ORDER BY dt.period",
+        [$day]
+    );
+
+    // Statistiky srovnání
+    $diffs = array_filter(
+        array_map(fn($r) => $r['diff_eur'] !== null ? (float)$r['diff_eur'] : null, $rows),
+        fn($v) => $v !== null
+    );
+    $diffPcts = array_filter(
+        array_map(fn($r) => $r['diff_pct'] !== null ? (float)$r['diff_pct'] : null, $rows),
+        fn($v) => $v !== null
+    );
+
+    $stats = [
+        'count'          => count($rows),
+        'periods_with_data' => count($diffs),
+        'avg_diff_eur'   => $diffs ? round(array_sum($diffs) / count($diffs), 2) : null,
+        'max_over_eur'   => $diffs ? round(max($diffs), 2) : null,
+        'max_under_eur'  => $diffs ? round(min($diffs), 2) : null,
+        'avg_diff_pct'   => $diffPcts ? round(array_sum($diffPcts) / count($diffPcts), 1) : null,
+        'periods_over'   => count(array_filter($diffs, fn($v) => $v > 0)),
+        'periods_under'  => count(array_filter($diffs, fn($v) => $v < 0)),
+    ];
+
+    return [
+        'mode'         => 'compare',
+        'granularity'  => 'compare',
+        'day'          => $day,
+        'periods'      => $rows,
+        'stats'        => $stats,
+        'generated_at' => date('c'),
+    ];
+}
+
+function spotDt15Stats(array $rows, string $eurKey = 'price_15min_eur', string $czkKey = 'price_15min_czk'): array
+{
+    if (empty($rows)) {
+        return ['count' => 0, 'min_eur' => null, 'avg_eur' => null, 'max_eur' => null,
+                'min_czk' => null, 'avg_czk' => null, 'max_czk' => null,
+                'negative_periods' => 0];
+    }
+    $eur = array_filter(array_map(fn($r) => $r[$eurKey] !== null ? (float) $r[$eurKey] : null, $rows), fn($v) => $v !== null);
+    $czk = array_filter(array_map(fn($r) => $r[$czkKey] !== null ? (float) $r[$czkKey] : null, $rows), fn($v) => $v !== null);
+    if (empty($eur)) {
+        return ['count' => count($rows), 'min_eur' => null, 'avg_eur' => null, 'max_eur' => null,
+                'min_czk' => null, 'avg_czk' => null, 'max_czk' => null, 'negative_periods' => 0];
+    }
+    $neg = count(array_filter($eur, fn($v) => $v < 0));
+    return [
+        'count'   => count($rows),
+        'min_eur' => round(min($eur), 2),
+        'avg_eur' => round(array_sum($eur) / count($eur), 2),
+        'max_eur' => round(max($eur), 2),
+        'min_czk' => round(min($czk), 2),
+        'avg_czk' => round(array_sum($czk) / count($czk), 2),
+        'max_czk' => round(max($czk), 2),
+        'negative_periods' => $neg,
+    ];
 }

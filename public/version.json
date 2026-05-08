@@ -1,5 +1,5 @@
 {
-  "version": "0.74.3",
+  "version": "0.75.1",
   "buildDate": "2026-05-07",
-  "feature": "sw.js: PHP str\u00e1nky network-first (fix cache probl\u00e9mu po p\u0159ekliknut\u00ed)"
+  "feature": "Compare mode: divergent bar v tabulce (\u010derven\u00e1 +, zelen\u00e1 -)"
 }

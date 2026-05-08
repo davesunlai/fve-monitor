@@ -13,9 +13,16 @@ if (!Auth::isLoggedIn()) {
 $tab = $_GET['tab'] ?? 'today';
 if (!in_array($tab, ['today', 'tomorrow', 'history'], true)) $tab = 'today';
 
-// granularita: 15min default pro dnes/zítra (od 1.10.2024 OTE), hour pro starší historii
-$granularity = $_GET['gran'] ?? ($tab === 'history' ? 'hour' : '15min');
-if (!in_array($granularity, ['hour', '15min'], true)) $granularity = '15min';
+// granularita: dt15min default pro zítřek (predikce), 15min pro dnes (realita), hour pro historii
+if ($tab === 'tomorrow') {
+    $defaultGran = 'dt15min';  // zítra máme jen predikci z denní aukce
+} elseif ($tab === 'history') {
+    $defaultGran = 'hour';
+} else {
+    $defaultGran = '15min';  // dnes - VDT realita
+}
+$granularity = $_GET['gran'] ?? $defaultGran;
+if (!in_array($granularity, ['hour', '15min', 'dt15min', 'compare'], true)) $granularity = $defaultGran;
 
 // Picker konkrétního dne (jen pro tab today/tomorrow - když user chce procházet)
 $selectedDay = $_GET['day'] ?? null;
@@ -42,11 +49,24 @@ require __DIR__ . '/_app_head.php';
         <a href="?tab=tomorrow" class="spot-tab <?= $tab === 'tomorrow' ? 'active' : '' ?>">🔜 Zítra</a>
         <a href="?tab=history" class="spot-tab <?= $tab === 'history' ? 'active' : '' ?>">📊 Historie</a>
         <div class="spot-gran">
-            <label>Granularita:</label>
-            <a href="?tab=<?= $tab ?>&gran=15min<?= isset($_GET['from']) ? '&from='.htmlspecialchars($_GET['from']).'&to='.htmlspecialchars($_GET['to']) : '' ?>" class="gran-btn <?= $granularity === '15min' ? 'active' : '' ?>">15 min (VDT)</a>
-            <a href="?tab=<?= $tab ?>&gran=hour<?= isset($_GET['from']) ? '&from='.htmlspecialchars($_GET['from']).'&to='.htmlspecialchars($_GET['to']) : '' ?>" class="gran-btn <?= $granularity === 'hour' ? 'active' : '' ?>">1 hod (DT)</a>
+            <?php
+            $rangeQs = isset($_GET['from']) ? '&from='.htmlspecialchars($_GET['from']).'&to='.htmlspecialchars($_GET['to']) : '';
+            $dayQs = isset($_GET['day']) ? '&day='.htmlspecialchars($_GET['day']) : '';
+            ?>
+            <a href="?tab=<?= $tab ?>&gran=dt15min<?= $rangeQs.$dayQs ?>" class="gran-btn <?= $granularity === 'dt15min' ? 'active' : '' ?>" title="Denní trh - predikce z aukce, 15min produkty">📈 DT predikce</a>
+            <a href="?tab=<?= $tab ?>&gran=15min<?= $rangeQs.$dayQs ?>" class="gran-btn <?= $granularity === '15min' ? 'active' : '' ?>" title="Vnitrodenní trh - reálné obchody 15min">⚡ VDT realita</a>
+            <a href="?tab=<?= $tab ?>&gran=compare<?= $rangeQs.$dayQs ?>" class="gran-btn <?= $granularity === 'compare' ? 'active' : '' ?>" title="DT predikce vs VDT realita">🔀 Srovnání</a>
+            <a href="?tab=<?= $tab ?>&gran=hour<?= $rangeQs.$dayQs ?>" class="gran-btn <?= $granularity === 'hour' ? 'active' : '' ?>" title="Hodinová DT cena (starší formát)">🕐 1 hod</a>
         </div>
-        <span class="spot-source">Zdroj: OTE-CR <?= $granularity === '15min' ? 'vnitrodenní trh (VDT)' : 'denní trh (DT)' ?> · kurz ČNB</span>
+        <?php
+$sourceLabel = match($granularity) {
+    'dt15min' => 'denní trh 15min (predikce)',
+    '15min'   => 'vnitrodenní trh 15min (realita)',
+    'compare' => 'DT predikce + VDT realita',
+    default   => 'denní trh hodinový',
+};
+?>
+        <span class="spot-source">Zdroj: OTE-CR · <?= $sourceLabel ?> · kurz ČNB</span>
     </div>
 
     <?php if ($tab !== 'history'): ?>
@@ -366,6 +386,43 @@ require __DIR__ . '/_app_head.php';
     color: var(--accent);
     border-color: var(--accent);
 }
+
+/* ─── Divergent bar (compare tab) ─── */
+.diff-bar-th { min-width: 140px; text-align: center !important; }
+.diff-bar-td { padding: 4px 6px !important; min-width: 140px; }
+.diff-bar-cell {
+    width: 100%;
+    height: 18px;
+    display: flex;
+    align-items: center;
+}
+.diff-bar-track {
+    position: relative;
+    width: 100%;
+    height: 14px;
+    background: var(--surface-2);
+    border-radius: 2px;
+    overflow: visible;
+}
+.diff-bar-center {
+    position: absolute;
+    left: 50%;
+    top: -2px;
+    bottom: -2px;
+    width: 1.5px;
+    background: var(--text-dim);
+    opacity: 0.5;
+    transform: translateX(-50%);
+}
+.diff-bar-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 2px;
+    transition: width 0.2s ease;
+}
+.diff-bar-pos { left: 50%; }
+.diff-bar-neg { /* right je inline (50%) */ }
 </style>
 
 <script>
@@ -384,17 +441,28 @@ const fmtDate = (s) => {
     const d = new Date(s + 'T00:00:00');
     return d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric', year: 'numeric' });
 };
-// Normalizuje data z hourly i 15min API do společného formátu {label, eur, czk}
+// Normalizuje data z hourly/15min/dt15min API do společného formátu {label, eur, czk}
 function normalizeRows(rows, gran) {
     if (gran === '15min') {
         return rows.map(r => ({
-            label: r.time_from.slice(0, 5),  // "00:15:00" → "00:15"
+            label: r.time_from.slice(0, 5),
             period: r.period,
             eur: parseFloat(r.price_avg_eur),
             czk: parseFloat(r.price_avg_czk),
             eur_min: r.price_min_eur !== null ? parseFloat(r.price_min_eur) : null,
             eur_max: r.price_max_eur !== null ? parseFloat(r.price_max_eur) : null,
             volume: r.volume_mwh !== null ? parseFloat(r.volume_mwh) : null,
+        }));
+    }
+    if (gran === 'dt15min') {
+        return rows.map(r => ({
+            label: r.time_from.slice(0, 5),
+            period: r.period,
+            eur: parseFloat(r.price_15min_eur),
+            czk: parseFloat(r.price_15min_czk),
+            eur_60: r.price_60min_eur !== null ? parseFloat(r.price_60min_eur) : null,
+            volume: r.volume_mwh !== null ? parseFloat(r.volume_mwh) : null,
+            saldo: r.saldo_mwh !== null ? parseFloat(r.saldo_mwh) : null,
         }));
     }
     return rows.map(r => ({
@@ -419,7 +487,7 @@ const priceColor = (eur) => {
 let chart = null;
 
 // ─── Render: stat cards ───
-function renderStats(stats, label = '') {
+function renderStats(stats, label = '', context = '') {
     const container = document.getElementById('stats-cards');
     if (!stats || stats.count === 0) {
         container.innerHTML = '<div class="empty-msg">Žádná data</div>';
@@ -684,6 +752,195 @@ function renderDailyTable(days, title) {
     `).join('');
 }
 
+// ─── Compare mode: DT predikce vs VDT realita ───
+function renderCompareMode(data) {
+    const periods = data.periods || [];
+    const stats = data.stats || {};
+    const day = data.day;
+
+    // ─── Stat karty ───
+    const container = document.getElementById('stats-cards');
+    if (!periods.length) {
+        container.innerHTML = '<div class="empty-msg" style="grid-column:1/-1">Žádná data pro srovnání</div>';
+        return;
+    }
+
+    const avgDiffEur = stats.avg_diff_eur;
+    const avgDiffPct = stats.avg_diff_pct;
+    const isOver = (avgDiffEur || 0) > 0;
+    const diffColor = isOver ? 'bad' : 'good';
+    const diffArrow = isOver ? '↑' : '↓';
+
+    container.innerHTML = `
+        <div class="stat-card">
+            <div class="label">Datum srovnání</div>
+            <div class="value" style="font-size:1rem">${fmtDate(day)}</div>
+            <div class="sub">${stats.periods_with_data}/${stats.count} period s daty</div>
+        </div>
+        <div class="stat-card ${diffColor}">
+            <div class="label">Průměrná odchylka</div>
+            <div class="value">${diffArrow} ${fmt(Math.abs(avgDiffEur || 0), 2)} EUR</div>
+            <div class="sub">${avgDiffPct !== null ? (isOver ? '+' : '') + fmt(avgDiffPct, 1) + ' % vs predikce' : '—'}</div>
+        </div>
+        <div class="stat-card bad">
+            <div class="label">Max nad predikci</div>
+            <div class="value">+${fmt(stats.max_over_eur, 2)}</div>
+            <div class="sub">EUR/MWh · ${stats.periods_over} period</div>
+        </div>
+        <div class="stat-card good">
+            <div class="label">Max pod predikci</div>
+            <div class="value">${fmt(stats.max_under_eur, 2)}</div>
+            <div class="sub">EUR/MWh · ${stats.periods_under} period</div>
+        </div>
+    `;
+
+    // ─── Graf - 2 sady sloupců (DT modrá, VDT oranžová) ───
+    const labels = periods.map(p => p.time_from.slice(0, 5));
+    const dtData  = periods.map(p => p.dt_czk !== null ? parseFloat(p.dt_czk) : null);
+    const vdtData = periods.map(p => p.vdt_czk !== null ? parseFloat(p.vdt_czk) : null);
+
+    document.getElementById('chart-title').textContent =
+        `🔀 Predikce vs realita — ${fmtDate(day)} (96 period)`;
+
+    const ctx = document.getElementById('spot-chart');
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: '📈 DT predikce',
+                    data: dtData,
+                    backgroundColor: 'rgba(96, 165, 250, 0.75)',  // modrá
+                    borderColor: 'rgba(96, 165, 250, 1)',
+                    borderWidth: 0.5,
+                    barPercentage: 1.0,
+                    categoryPercentage: 0.9,
+                },
+                {
+                    label: '⚡ VDT realita',
+                    data: vdtData,
+                    backgroundColor: 'rgba(251, 191, 36, 0.85)',  // oranžová
+                    borderColor: 'rgba(251, 191, 36, 1)',
+                    borderWidth: 0.5,
+                    barPercentage: 1.0,
+                    categoryPercentage: 0.9,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        title: (items) => `Period ${periods[items[0].dataIndex].period} · ${labels[items[0].dataIndex]}`,
+                        afterBody: (items) => {
+                            const p = periods[items[0].dataIndex];
+                            if (p.diff_eur === null) return '';
+                            const sign = p.diff_eur > 0 ? '+' : '';
+                            return [`Rozdíl: ${sign}${fmt(p.diff_eur)} EUR/MWh (${sign}${fmt(p.diff_pct, 1)} %)`];
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    title: { display: true, text: 'Kč/MWh' },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        autoSkip: true,
+                        maxTicksLimit: 24,
+                        callback: function(val) {
+                            const lbl = this.getLabelForValue(val);
+                            return lbl && lbl.endsWith(':00') ? lbl : '';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // ─── Tabulka ───
+    document.getElementById('table-title').textContent =
+        `Detail period — ${fmtDate(day)}`;
+    document.getElementById('spot-thead').innerHTML = `
+        <tr>
+            <th>Period</th>
+            <th>Interval</th>
+            <th>📈 DT predikce</th>
+            <th>⚡ VDT realita</th>
+            <th>Rozdíl EUR</th>
+            <th>Rozdíl %</th>
+            <th class="diff-bar-th">Odchylka</th>
+            <th>Objem MWh</th>
+        </tr>
+    `;
+
+    // Spočítej max absolutní odchylku pro škálování barů (společný range pro všechny řádky)
+    const allDiffs = periods.map(p => p.diff_eur !== null ? Math.abs(parseFloat(p.diff_eur)) : 0);
+    const maxAbsDiff = Math.max(...allDiffs, 1); // min 1 ať se nedělí nulou
+
+    document.getElementById('spot-tbody').innerHTML = periods.map(p => {
+        const diffEur = p.diff_eur !== null ? parseFloat(p.diff_eur) : null;
+        const diffPct = p.diff_pct !== null ? parseFloat(p.diff_pct) : null;
+        let diffClass = '';
+        if (diffEur !== null) {
+            if (Math.abs(diffEur) > 30) diffClass = diffEur > 0 ? 'cell-high' : 'cell-neg';
+        }
+        const sign = (v) => v > 0 ? '+' : '';
+
+        // Divergent bar: 0% = uprostřed, kladné jde doprava (červené), záporné doleva (zelené)
+        let diffBar = '<span style="color:var(--text-dim)">—</span>';
+        if (diffEur !== null) {
+            const ratio = Math.abs(diffEur) / maxAbsDiff;  // 0..1
+            const widthPct = (ratio * 50).toFixed(1);  // 0..50% (polovina šířky pro každou stranu)
+            const isPositive = diffEur > 0;
+            const barColor = isPositive ? 'rgba(248, 113, 113, 0.85)' : 'rgba(74, 222, 128, 0.85)';
+
+            if (isPositive) {
+                // Kladné = doprava od středu
+                diffBar = `
+                    <div class="diff-bar-cell">
+                        <div class="diff-bar-track">
+                            <div class="diff-bar-center"></div>
+                            <div class="diff-bar-fill diff-bar-pos" style="width:${widthPct}%; background:${barColor}"></div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Záporné = doleva od středu
+                diffBar = `
+                    <div class="diff-bar-cell">
+                        <div class="diff-bar-track">
+                            <div class="diff-bar-center"></div>
+                            <div class="diff-bar-fill diff-bar-neg" style="width:${widthPct}%; background:${barColor}; right:50%"></div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        return `
+            <tr>
+                <td>${p.period}</td>
+                <td>${p.time_from.slice(0,5)}</td>
+                <td>${p.dt_eur !== null ? fmt(p.dt_eur) + ' €' : '—'}</td>
+                <td>${p.vdt_eur !== null ? fmt(p.vdt_eur) + ' €' : '<span style="color:var(--text-dim)">čeká se</span>'}</td>
+                <td class="${diffClass}">${diffEur !== null ? sign(diffEur) + fmt(diffEur) : '—'}</td>
+                <td class="${diffClass}">${diffPct !== null ? sign(diffPct) + fmt(diffPct, 1) + ' %' : '—'}</td>
+                <td class="diff-bar-td">${diffBar}</td>
+                <td>${p.vdt_volume !== null ? fmt(p.vdt_volume, 1) : '—'}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
 // ─── Načtení dat dle tabu ───
 async function loadData() {
     try {
@@ -694,10 +951,58 @@ async function loadData() {
         } else if (SELECTED_DAY) {
             // Picker - konkrétní den
             url += '&day=' + SELECTED_DAY;
+        } else if (GRAN === 'compare') {
+            // Compare - default dnes
+            url += '&day=' + new Date().toISOString().slice(0,10);
         }
 
         const r = await fetch(url);
         const data = await r.json();
+
+        // Compare mode - speciální render
+        if (data.mode === 'compare') {
+            renderCompareMode(data);
+            return;
+        }
+
+        // DT 15min: pokud konkrétní den
+        if (data.mode === 'day_dt15min') {
+            const rows = normalizeRows(data.periods || [], GRAN);
+            renderStats(data.stats, '· ' + fmtDate(data.day), 'predikce');
+            renderHourlyChart(rows, `📈 DT predikce — ${fmtDate(data.day)}`);
+            renderHourlyTable(rows, `Tabulka cen — ${fmtDate(data.day)}`);
+            return;
+        }
+
+        // DT 15min default: multi-day (dnes + zítra + pozítří)
+        if (data.mode === 'multi_day_dt15min') {
+            // Zobraz to k jaký tab byl vybrán
+            let dayKey, dayDate, available;
+            if (TAB === 'tomorrow') {
+                dayKey = 'tomorrow';
+                dayDate = data.tomorrow_date;
+                available = data.tomorrow_available;
+            } else {
+                dayKey = 'today';
+                dayDate = data.today_date;
+                available = data.today.length > 0;
+            }
+            const rawRows = data[dayKey] || [];
+            if (rawRows.length === 0) {
+                document.getElementById('stats-cards').innerHTML =
+                    '<div class="empty-msg" style="grid-column:1/-1;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:1.5rem">' +
+                    '⏳ Predikce pro ' + fmtDate(dayDate) + ' zatím nepublikována.<br>' +
+                    '<span style="font-size:0.85rem">OTE publikuje DT 15min D-1 v 14:00.</span></div>';
+                document.getElementById('chart-title').textContent = '';
+                renderHourlyTable([], `Tabulka cen — ${fmtDate(dayDate)}`);
+                return;
+            }
+            const rows = normalizeRows(rawRows, GRAN);
+            renderStats(data[dayKey + '_stats'], '· ' + fmtDate(dayDate), 'predikce');
+            renderHourlyChart(rows, `📈 DT predikce — ${fmtDate(dayDate)}`);
+            renderHourlyTable(rows, `Tabulka cen — ${fmtDate(dayDate)}`);
+            return;
+        }
 
         // Pokud máme konkrétní den (mode=day nebo day_15min), zobraz ho jako "today"
         if (data.mode === 'day' || data.mode === 'day_15min') {
