@@ -1,5 +1,5 @@
 {
-  "version": "0.75.4",
+  "version": "0.75.5",
   "buildDate": "2026-05-07",
-  "feature": "Compare graf: synchronizace os Y na nulu (odchylka od osy 0)"
+  "feature": "Compare graf - jedna osa Y pro ceny i odchylky (sjednocen\u00e9 m\u011b\u0159\u00edtko K\u010d/MWh)"
 }
