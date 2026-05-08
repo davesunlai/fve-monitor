@@ -771,6 +771,19 @@ function renderCompareMode(data) {
     const diffColor = isOver ? 'bad' : 'good';
     const diffArrow = isOver ? '↑' : '↓';
 
+    // Spočítej Kč ekvivalenty z EUR (kurz vezmem z prvního period s rate)
+    const rate = (() => {
+        for (const p of periods) {
+            if (p.dt_eur !== null && p.dt_czk !== null && p.dt_eur !== 0) {
+                return parseFloat(p.dt_czk) / parseFloat(p.dt_eur);
+            }
+        }
+        return 25.0;
+    })();
+    const avgDiffCzk = avgDiffEur !== null ? avgDiffEur * rate : null;
+    const maxOverCzk = stats.max_over_eur !== null ? stats.max_over_eur * rate : null;
+    const maxUnderCzk = stats.max_under_eur !== null ? stats.max_under_eur * rate : null;
+
     container.innerHTML = `
         <div class="stat-card">
             <div class="label">Datum srovnání</div>
@@ -779,18 +792,18 @@ function renderCompareMode(data) {
         </div>
         <div class="stat-card ${diffColor}">
             <div class="label">Průměrná odchylka</div>
-            <div class="value">${diffArrow} ${fmt(Math.abs(avgDiffEur || 0), 2)} EUR</div>
-            <div class="sub">${avgDiffPct !== null ? (isOver ? '+' : '') + fmt(avgDiffPct, 1) + ' % vs predikce' : '—'}</div>
+            <div class="value">${diffArrow} ${fmt(Math.abs(avgDiffCzk || 0), 0)} Kč/MWh</div>
+            <div class="sub">${avgDiffPct !== null ? (isOver ? '+' : '') + fmt(avgDiffPct, 1) + ' % · ' + (isOver ? '+' : '') + fmt(avgDiffEur, 2) + ' €' : '—'}</div>
         </div>
         <div class="stat-card bad">
             <div class="label">Max nad predikci</div>
-            <div class="value">+${fmt(stats.max_over_eur, 2)}</div>
-            <div class="sub">EUR/MWh · ${stats.periods_over} period</div>
+            <div class="value">+${fmt(maxOverCzk, 0)} Kč/MWh</div>
+            <div class="sub">+${fmt(stats.max_over_eur, 2)} €/MWh · ${stats.periods_over} period</div>
         </div>
         <div class="stat-card good">
             <div class="label">Max pod predikci</div>
-            <div class="value">${fmt(stats.max_under_eur, 2)}</div>
-            <div class="sub">EUR/MWh · ${stats.periods_under} period</div>
+            <div class="value">${fmt(maxUnderCzk, 0)} Kč/MWh</div>
+            <div class="sub">${fmt(stats.max_under_eur, 2)} €/MWh · ${stats.periods_under} period</div>
         </div>
     `;
 
@@ -873,9 +886,9 @@ function renderCompareMode(data) {
         <tr>
             <th>Period</th>
             <th>Interval</th>
-            <th>📈 DT predikce</th>
-            <th>⚡ VDT realita</th>
-            <th>Rozdíl EUR</th>
+            <th>📈 DT predikce<br><span style="font-weight:400;text-transform:none;color:var(--text-dim)">Kč/MWh · €</span></th>
+            <th>⚡ VDT realita<br><span style="font-weight:400;text-transform:none;color:var(--text-dim)">Kč/MWh · €</span></th>
+            <th>Rozdíl<br><span style="font-weight:400;text-transform:none;color:var(--text-dim)">Kč/MWh</span></th>
             <th>Rozdíl %</th>
             <th class="diff-bar-th">Odchylka</th>
             <th>Objem MWh</th>
@@ -926,13 +939,18 @@ function renderCompareMode(data) {
             }
         }
 
+        // Kč hodnoty
+        const dtCzk = p.dt_czk !== null ? parseFloat(p.dt_czk) : null;
+        const vdtCzk = p.vdt_czk !== null ? parseFloat(p.vdt_czk) : null;
+        const diffCzk = (dtCzk !== null && vdtCzk !== null) ? (vdtCzk - dtCzk) : null;
+
         return `
             <tr>
                 <td>${p.period}</td>
                 <td>${p.time_from.slice(0,5)}</td>
-                <td>${p.dt_eur !== null ? fmt(p.dt_eur) + ' €' : '—'}</td>
-                <td>${p.vdt_eur !== null ? fmt(p.vdt_eur) + ' €' : '<span style="color:var(--text-dim)">čeká se</span>'}</td>
-                <td class="${diffClass}">${diffEur !== null ? sign(diffEur) + fmt(diffEur) : '—'}</td>
+                <td>${dtCzk !== null ? '<strong>' + fmt(dtCzk, 0) + '</strong> <span style="color:var(--text-dim);font-size:0.78em">' + fmt(p.dt_eur) + ' €</span>' : '—'}</td>
+                <td>${vdtCzk !== null ? '<strong>' + fmt(vdtCzk, 0) + '</strong> <span style="color:var(--text-dim);font-size:0.78em">' + fmt(p.vdt_eur) + ' €</span>' : '<span style="color:var(--text-dim)">čeká se</span>'}</td>
+                <td class="${diffClass}">${diffCzk !== null ? sign(diffCzk) + fmt(diffCzk, 0) : '—'}</td>
                 <td class="${diffClass}">${diffPct !== null ? sign(diffPct) + fmt(diffPct, 1) + ' %' : '—'}</td>
                 <td class="diff-bar-td">${diffBar}</td>
                 <td>${p.vdt_volume !== null ? fmt(p.vdt_volume, 1) : '—'}</td>
