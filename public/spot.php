@@ -899,7 +899,10 @@ function renderCompareMode(data) {
                     type: 'linear',
                     position: 'left',
                     title: { display: true, text: 'Cena Kč/MWh' },
-                    grid: { color: 'rgba(255,255,255,0.05)' }
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    // Dynamický rozsah: max ceny + 10%, min = -max(odchylka)
+                    suggestedMax: Math.max(...dtData.filter(v => v !== null), ...vdtData.filter(v => v !== null)) * 1.05,
+                    suggestedMin: -Math.max(...diffData.filter(v => v !== null).map(v => Math.abs(v))) * 1.2,
                 },
                 yDiff: {
                     type: 'linear',
@@ -909,6 +912,25 @@ function renderCompareMode(data) {
                     ticks: {
                         callback: (val) => (val > 0 ? '+' : '') + val
                     },
+                    // Stejný rozsah jako levá osa, ale přepočítaný na škálu odchylky
+                    // Nula musí být na stejné Y pozici jako u levé osy
+                    suggestedMax: Math.max(...diffData.filter(v => v !== null)) * 1.2,
+                    suggestedMin: Math.min(...diffData.filter(v => v !== null)) * 1.2,
+                    afterFit: function(scaleInstance) {
+                        // Synchronizuj nulu: poměr maxY/minY musí sedět s levou osou
+                        const leftScale = scaleInstance.chart.scales.y;
+                        if (!leftScale) return;
+                        const leftRange = leftScale.max - leftScale.min;
+                        const leftZeroRatio = leftScale.max / leftRange;  // kde leží 0 odshora (0..1)
+
+                        // Pro pravou osu chceme stejný poměr
+                        const rightMax = Math.max(...diffData.filter(v => v !== null), 1) * 1.2;
+                        // rightMax / (rightMax - rightMin) = leftZeroRatio
+                        // → rightMin = rightMax - rightMax/leftZeroRatio
+                        const rightMin = rightMax - (rightMax / leftZeroRatio);
+                        scaleInstance.options.min = rightMin;
+                        scaleInstance.options.max = rightMax;
+                    }
                 },
                 x: {
                     grid: { display: false },

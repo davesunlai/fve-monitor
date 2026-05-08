@@ -1,5 +1,5 @@
 {
-  "version": "0.75.3",
+  "version": "0.75.4",
   "buildDate": "2026-05-07",
-  "feature": "Compare graf - 3. dataset divergent bar (odchylka na sekund\u00e1rn\u00ed ose Y)"
+  "feature": "Compare graf: synchronizace os Y na nulu (odchylka od osy 0)"
 }
