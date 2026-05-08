@@ -1,5 +1,5 @@
 {
-  "version": "0.75.2",
+  "version": "0.75.3",
   "buildDate": "2026-05-07",
-  "feature": "Compare mode - K\u010d jako prim\u00e1rn\u00ed jednotka (EUR men\u0161\u00ed vedle)"
+  "feature": "Compare graf - 3. dataset divergent bar (odchylka na sekund\u00e1rn\u00ed ose Y)"
 }

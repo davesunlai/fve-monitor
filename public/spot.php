@@ -812,6 +812,23 @@ function renderCompareMode(data) {
     const dtData  = periods.map(p => p.dt_czk !== null ? parseFloat(p.dt_czk) : null);
     const vdtData = periods.map(p => p.vdt_czk !== null ? parseFloat(p.vdt_czk) : null);
 
+    // Třetí dataset: divergent bar (rozdíl Kč/MWh) - na sekundární ose
+    const diffData = periods.map(p => p.diff_czk !== null ? parseFloat(p.diff_czk) : null);
+
+    // Barvy pro divergent bar - per period
+    const diffColors = diffData.map(v => {
+        if (v === null) return 'rgba(120, 120, 120, 0.3)';
+        return v > 0
+            ? 'rgba(248, 113, 113, 0.85)'   // červená (nad predikci)
+            : 'rgba(74, 222, 128, 0.85)';   // zelená (pod predikci)
+    });
+    const diffBorders = diffData.map(v => {
+        if (v === null) return 'rgba(120, 120, 120, 0.5)';
+        return v > 0
+            ? 'rgba(248, 113, 113, 1)'
+            : 'rgba(74, 222, 128, 1)';
+    });
+
     document.getElementById('chart-title').textContent =
         `🔀 Predikce vs realita — ${fmtDate(day)} (96 period)`;
 
@@ -825,20 +842,35 @@ function renderCompareMode(data) {
                 {
                     label: '📈 DT predikce',
                     data: dtData,
-                    backgroundColor: 'rgba(96, 165, 250, 0.75)',  // modrá
+                    backgroundColor: 'rgba(96, 165, 250, 0.75)',
                     borderColor: 'rgba(96, 165, 250, 1)',
                     borderWidth: 0.5,
                     barPercentage: 1.0,
-                    categoryPercentage: 0.9,
+                    categoryPercentage: 0.85,
+                    yAxisID: 'y',
+                    order: 2,
                 },
                 {
                     label: '⚡ VDT realita',
                     data: vdtData,
-                    backgroundColor: 'rgba(251, 191, 36, 0.85)',  // oranžová
+                    backgroundColor: 'rgba(251, 191, 36, 0.85)',
                     borderColor: 'rgba(251, 191, 36, 1)',
                     borderWidth: 0.5,
                     barPercentage: 1.0,
-                    categoryPercentage: 0.9,
+                    categoryPercentage: 0.85,
+                    yAxisID: 'y',
+                    order: 2,
+                },
+                {
+                    label: '🔀 Odchylka (Kč/MWh)',
+                    data: diffData,
+                    backgroundColor: diffColors,
+                    borderColor: diffBorders,
+                    borderWidth: 0.5,
+                    barPercentage: 1.0,
+                    categoryPercentage: 0.6,
+                    yAxisID: 'yDiff',
+                    order: 1,
                 }
             ]
         },
@@ -854,15 +886,29 @@ function renderCompareMode(data) {
                             const p = periods[items[0].dataIndex];
                             if (p.diff_eur === null) return '';
                             const sign = p.diff_eur > 0 ? '+' : '';
-                            return [`Rozdíl: ${sign}${fmt(p.diff_eur)} EUR/MWh (${sign}${fmt(p.diff_pct, 1)} %)`];
+                            return [
+                                `Rozdíl: ${sign}${fmt(p.diff_czk, 0)} Kč/MWh`,
+                                `         ${sign}${fmt(p.diff_eur)} €/MWh (${sign}${fmt(p.diff_pct, 1)} %)`
+                            ];
                         }
                     }
                 }
             },
             scales: {
                 y: {
-                    title: { display: true, text: 'Kč/MWh' },
+                    type: 'linear',
+                    position: 'left',
+                    title: { display: true, text: 'Cena Kč/MWh' },
                     grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                yDiff: {
+                    type: 'linear',
+                    position: 'right',
+                    title: { display: true, text: 'Odchylka Kč/MWh', color: 'rgba(248, 113, 113, 0.9)' },
+                    grid: { drawOnChartArea: false },
+                    ticks: {
+                        callback: (val) => (val > 0 ? '+' : '') + val
+                    },
                 },
                 x: {
                     grid: { display: false },
