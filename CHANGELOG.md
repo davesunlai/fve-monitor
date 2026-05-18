@@ -261,3 +261,11 @@
 - Kurz: ČNB denní fixing (`denni_kurz.txt?date=DD.MM.YYYY`)
 - Podpora DST přechodů (23h dny v březnu)
 - Chybí 1 den v historii: 2025-07-04 (OTE výpadek)
+
+## v0.75.6 — 2026-05-17 — Cron VDT 15min na 15min interval
+
+### Změna
+- Cron `fetch_spot_prices_15min.py` přepnut z `5 8-23 * * *` na `1,16,31,46 8-23 * * *`
+- Důvod: OTE publikuje XLSX vícekrát za hodinu, hodinový fetch způsoboval zpoždění do 60 min
+- Nový fetch: každých 15 min, zpoždění max 15 min
+- Žádné code changes - jen cron rozvrh
