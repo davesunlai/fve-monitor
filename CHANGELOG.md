@@ -269,3 +269,11 @@
 - Důvod: OTE publikuje XLSX vícekrát za hodinu, hodinový fetch způsoboval zpoždění do 60 min
 - Nový fetch: každých 15 min, zpoždění max 15 min
 - Žádné code changes - jen cron rozvrh
+
+## v0.75.7 — 2026-05-17 — Cron VDT 15min 24/7
+
+### Změna
+- Cron `fetch_spot_prices_15min.py` rozšířen z `1,16,31,46 8-23 * * *` na `1,16,31,46 * * * *`
+- Důvod: VDT data se mohou pozdě aktualizovat i v noci/ráno, chceme být vždy aktuální
+- Nový rozvrh: **96 spuštění/den** (4× za hodinu × 24h)
+- Žádné code changes - jen cron rozvrh
