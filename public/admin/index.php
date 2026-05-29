@@ -3,6 +3,7 @@
  * Admin — seznam elektráren
  */
 require __DIR__ . '/_auth.php';
+\FveMonitor\Lib\Acl::requireAccess('admin_plants');
 
 use FveMonitor\Lib\Database;
 
@@ -24,25 +25,11 @@ $plants = Database::all(
 <link rel="stylesheet" href="admin.css">
 </head>
 <body>
-<header class="topbar">
-    <?php $u = \FveMonitor\Lib\Auth::currentUser(); ?>
-    <h1>⚙️ FVE Monitor — Admin</h1>
-    <div class="topbar-meta">
-        <a href="../" class="btn btn-ghost">← Dashboard</a>
-        <a href="alerts_history.php" class="btn">📋 Historie alertů</a>
-        <a href="alert_settings.php" class="btn">⚙️ Nastavení alertů</a>
-        <a href="plants_ote.php" class="btn">🏛️ OTE/ERÚ</a>
-        <a href="ote_report.php" class="btn">📊 Měsíční výkaz</a>
-        <a href="import_csv.php" class="btn">📥 Import CSV</a>
-        <a href="import_isolarcloud.php" class="btn">⬇ Importovat z iSolarCloud</a>
-        <a href="plant_edit.php" class="btn btn-primary">+ Nová elektrárna</a>
-    </div>
-<div style="margin-left:auto;color:var(--text-dim);font-size:0.85rem">
-            <?= htmlspecialchars($u['full_name'] ?? $u['username'] ?? '') ?>
-            · <a href="profile.php" style="color:var(--text-dim)">Profil</a>
-            · <a href="logout.php" style="color:var(--text-dim)">Odhlásit</a>
-        </div>
-    </header>
+<?php
+$pageHeading = '⚙️ FVE Monitor — Admin';
+$activePage  = 'admin';
+require __DIR__ . '/../_topbar.php';
+?>
 
 <main>
     <?php if (!empty($_GET['msg'])): ?>

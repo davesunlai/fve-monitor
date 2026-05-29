@@ -582,6 +582,14 @@ footer {
     background: var(--border);
     margin: 6px 0;
 }
+.menu-section-label {
+    padding: 6px 12px 2px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-dim);
+    font-weight: 600;
+}
 
 .menu-item {
     display: flex;

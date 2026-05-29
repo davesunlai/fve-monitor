@@ -3,13 +3,18 @@ declare(strict_types=1);
 require __DIR__ . '/../../bootstrap.php';
 
 use FveMonitor\Lib\Auth;
+use FveMonitor\Lib\Acl;
 
 $error = null;
 $redirect = $_GET['r'] ?? 'index.php';
 
 // Pokud už přihlášen, jen redirect
 if (Auth::isLoggedIn()) {
-    header('Location: ' . $redirect);
+    // Pokud user nemá práva na cílové URL, redirect na dashboard
+            if (!Acl::canAccessUrl($redirect)) {
+                $redirect = '/';
+            }
+            header('Location: ' . $redirect);
     exit;
 }
 
@@ -22,6 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $user = Auth::login($username, $password);
         if ($user !== null) {
+            // Pokud user nemá práva na cílové URL, redirect na dashboard
+            if (!Acl::canAccessUrl($redirect)) {
+                $redirect = '/';
+            }
             header('Location: ' . $redirect);
             exit;
         }

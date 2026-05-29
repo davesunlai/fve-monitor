@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/_auth.php';
+\FveMonitor\Lib\Acl::requireAccess('admin_import_isolar');
 
 use FveMonitor\Lib\Database;
 use FveMonitor\Lib\ISolarCloudProvider;
@@ -117,12 +118,11 @@ try {
 <link rel="stylesheet" href="admin.css">
 </head>
 <body>
-<header class="topbar">
-    <h1>✓ Import dokončen</h1>
-    <div class="topbar-meta">
-        <a href="index.php" class="btn btn-primary">← Seznam elektráren</a>
-    </div>
-</header>
+<?php
+$pageHeading = '✓ Import dokončen';
+$activePage  = 'admin_import_isolar';
+require __DIR__ . '/../_topbar.php';
+?>
 
 <main>
     <div class="form-card">

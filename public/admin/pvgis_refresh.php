@@ -3,6 +3,7 @@
  * Admin — ručně spustí refresh PVGIS pro konkrétní elektrárnu.
  */
 require __DIR__ . '/_auth.php';
+\FveMonitor\Lib\Acl::requireAccess('admin_plant_edit');
 
 use FveMonitor\Lib\Database;
 use FveMonitor\Lib\PVGIS;
@@ -17,8 +18,9 @@ if (!$plant) {
 header('Content-Type: text/html; charset=utf-8');
 echo "<!doctype html><html><head><meta charset='utf-8'><title>PVGIS refresh</title>";
 echo "<link rel='stylesheet' href='../assets/style.css'><link rel='stylesheet' href='admin.css'></head><body>";
-echo "<header class='topbar'><h1>⟳ PVGIS refresh: " . htmlspecialchars($plant['name']) . "</h1>";
-echo "<div class='topbar-meta'><a href='index.php' class='btn btn-ghost'>← Zpět</a></div></header>";
+$pageHeading = '⟳ PVGIS refresh: ' . $plant['name'];
+$activePage  = 'admin';
+require __DIR__ . '/../_topbar.php';
 echo "<main><div class='form-card'><pre>";
 
 @ob_flush();

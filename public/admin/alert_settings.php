@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/_auth.php';
+\FveMonitor\Lib\Acl::requireAccess('admin_alert_settings');
 
 use FveMonitor\Lib\Database;
 use FveMonitor\Lib\Auth;
@@ -140,13 +141,11 @@ foreach ($plants as $p) {
     </style>
 </head>
 <body>
-<header class="topbar">
-    <h1>⚙️ Nastavení underperform alertů</h1>
-    <div style="margin-left:auto;color:var(--text-dim);font-size:0.85rem">
-        <a href="index.php" style="color:var(--text-dim)">← Admin</a>
-        · <?= htmlspecialchars($user['full_name'] ?? $user['username']) ?>
-    </div>
-</header>
+<?php
+$pageHeading = '🔧 Nastavení underperform alertů';
+$activePage  = 'admin_alert_settings';
+require __DIR__ . '/../_topbar.php';
+?>
 
 <main>
     <?php if ($msg): ?>

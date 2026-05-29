@@ -1,5 +1,49 @@
 # CHANGELOG
 
+## v0.76.0 — 2026-05-29 — ACL systém, Activity log, Yearly report
+### Přidáno
+- 📒 **Activity tracking & login audit** (`/admin/login_log.php`)
+  - 4 záložky: Login historie · Aktivně online · Activity log · Unikátní IP
+  - Heartbeat pro přihlášené i anonymní (SHA-256 hash IP+UA, GDPR-friendly)
+  - Login eventy: success/fail/logout, fail_reason, session_key, délka session
+  - Filtry: datum od/do, uživatel, IP, URI, událost, metoda (password/passkey)
+  - Stránkování + cleanup starých záznamů (datum picker)
+  - Heuristika online: last_seen < 5 min (● blikající indikátor)
+- 📆 **Yearly report** (`/yearly.php`)
+  - Pivot tabulka FVE × měsíc, plnění PVGIS predikce
+  - Heatmap barvy (červená→zelená podle plnění %)
+  - Buňka: real (velké) / pvgis (menší) / % (malé)
+  - Sloupec/řádek Σ rok, zvýraznění aktuálního měsíce
+  - Filtry: rok (dropdown), FVE (checkboxy)
+  - Export CSV + XLSX (SimpleXLSXGen knihovna)
+- 👥 **Správa uživatelů** (`/admin/users.php`, `/admin/user_edit.php`)
+  - CRUD: nový/editace/blokace/smazání, role (admin/operator/viewer)
+  - Permission matrix per uživatel s checkboxy
+  - Toggle "veřejná stránka" pro hosty (per page_key)
+  - Reset hesla v editaci, ochrana proti deaktivaci sebe sama
+- 🔐 **ACL systém** (`lib/Acl.php`)
+  - Tabulky `acl_pages` (definice) + `user_page_permissions` (per-user)
+  - `Acl::requireAccess('xxx')` — public? pusť, nepřihlášený? login, jinak 403/redirect
+  - Dynamické menu — položky bez práv se nezobrazují
+  - 16 stránek v ACL: 6 web (dashboard public) + 10 admin
+  - Login redirect: po přihlášení do URL bez práv → redirect na dashboard
+  - Helper `Acl::canAccessUrl()` pro URL → page_key mapování
+### Změny
+- 🕐 **PDO timezone fix** — `lib/Database.php` ENV INIT teď čte zónu z PHP `date()`
+  (předtím natvrdo `+00:00` → všechny `NOW()` v UTC, opraven UTC bug u SolarEdge)
+- ⚡ **SolarEdge timezone fix** — `lastUpdateTime` z API teď převáděn UTC → Europe/Prague
+- 🎨 Admin sekce v menu dynamizovaná z `acl_pages` (per-user render dle ACL)
+- 📉 Grafana link viditelný jen pro role `admin`
+### DB schema
+- 📒 `admin_login_log` — login eventy (event, method, fail_reason, session_key, IP, UA, logged_out_at)
+- 📊 `activity_sessions` — heartbeat per visitor (UPSERT, page_views, last_seen)
+- 📊 `activity_log` — append-only history (request_uri, method, referer)
+- 🔐 `acl_pages` — definice stránek (page_key, url, icon, is_public, sort_order)
+- 🔐 `user_page_permissions` — N:M user × page_key
+### Knihovny
+- 📥 `lib/SimpleXLSXGen.php` — XLSX export (Shuchkin, MIT, single-file, bez závislostí)
+
+
 ## v0.74 — 2026-05-07 — Spotové ceny OTE + SPOT kalkulačka
 
 ### Přidáno

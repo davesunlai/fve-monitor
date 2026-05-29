@@ -3,12 +3,10 @@ declare(strict_types=1);
 require __DIR__ . '/../bootstrap.php';
 
 use FveMonitor\Lib\Auth;
+use FveMonitor\Lib\Acl;
 
 Auth::start();
-if (!Auth::isLoggedIn()) {
-    header('Location: admin/login.php?r=' . urlencode($_SERVER['REQUEST_URI']));
-    exit;
-}
+Acl::requireAccess('spot');
 
 $tab = $_GET['tab'] ?? 'today';
 if (!in_array($tab, ['today', 'tomorrow', 'history'], true)) $tab = 'today';

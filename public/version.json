@@ -1,5 +1,5 @@
 {
-  "version": "0.75.5",
-  "buildDate": "2026-05-07",
-  "feature": "Compare graf - jedna osa Y pro ceny i odchylky (sjednocen\u00e9 m\u011b\u0159\u00edtko K\u010d/MWh)"
+  "version": "0.76.0",
+  "buildDate": "2026-05-29",
+  "feature": "Activity log + login audit, Yearly report (CSV/XLSX export), správa uživatelů + ACL per-stránka, PDO timezone fix"
 }

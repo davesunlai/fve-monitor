@@ -10,6 +10,7 @@
  */
 declare(strict_types=1);
 require __DIR__ . '/_auth.php';
+\FveMonitor\Lib\Acl::requireAccess('admin_alerts_history');
 
 use FveMonitor\Lib\Database;
 
@@ -267,15 +268,11 @@ function messageLinkify(string $text): string {
     </style>
 </head>
 <body>
-<?php $u = \FveMonitor\Lib\Auth::currentUser(); ?>
-<header class="topbar">
-    <h1>📋 Historie alertů</h1>
-    <div style="margin-left:auto;color:var(--text-dim);font-size:0.85rem">
-        <a href="index.php" style="color:var(--text-dim)">← Seznam elektráren</a>
-        · <?= htmlspecialchars($u['full_name'] ?? $u['username']) ?>
-        · <a href="logout.php" style="color:var(--text-dim)">Odhlásit</a>
-    </div>
-</header>
+<?php
+$pageHeading = '📋 Historie alertů';
+$activePage  = 'admin_alerts_history';
+require __DIR__ . '/../_topbar.php';
+?>
 
 <main>
     <!-- Statistiky za období -->

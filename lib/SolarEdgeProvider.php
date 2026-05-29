@@ -81,13 +81,21 @@ class SolarEdgeProvider implements ProviderInterface
         // lastDayData.energy je ve Wh, převedeme na kWh
         $energyTodayWh = (float) ($ov['lastDayData']['energy'] ?? 0);
 
-        // lastUpdateTime format: "2024-04-21 08:30:00" (v site timezone)
-        $ts = $ov['lastUpdateTime'] ?? date('Y-m-d H:i:s');
-
+        // lastUpdateTime: SolarEdge API vrací string bez zóny, fakticky je v UTC.
+        // Převedeme na lokální Europe/Prague pro konzistenci s ostatními providery.
+        $tsRaw = $ov['lastUpdateTime'] ?? gmdate('Y-m-d H:i:s');
+        try {
+            $tsUtc   = new \DateTimeImmutable($tsRaw, new \DateTimeZone('UTC'));
+            $tsLocal = $tsUtc->setTimezone(new \DateTimeZone('Europe/Prague'));
+            $ts         = $tsLocal->format('Y-m-d H:i:s');
+            $ageSeconds = time() - $tsUtc->getTimestamp();
+        } catch (\Throwable $e) {
+            $ts         = $tsRaw;
+            $ageSeconds = time() - strtotime($tsRaw);
+        }
         // Ochrana proti zamrzlým snapshotům - pokud měnič nehlásil > 30 min,
         // SolarEdge stále vrací poslední známý currentPower (i 9 dní starý).
         // V takovém případě FVE považujeme za offline a power_kw = 0.
-        $ageSeconds = time() - strtotime($ts);
         $isStale = $ageSeconds > 1800;  // 30 min
 
         return [

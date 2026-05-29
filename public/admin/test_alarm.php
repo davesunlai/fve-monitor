@@ -5,6 +5,7 @@
  */
 declare(strict_types=1);
 require __DIR__ . '/_auth.php';
+\FveMonitor\Lib\Acl::requireAccess('admin_plant_edit');
 
 use FveMonitor\Lib\Database;
 use Minishlink\WebPush\WebPush;

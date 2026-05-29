@@ -3,6 +3,7 @@
  * Admin — editace/vytvoření elektrárny s klikací mapou a sekcemi panelů
  */
 require __DIR__ . '/_auth.php';
+\FveMonitor\Lib\Acl::requireAccess('admin_plant_edit');
 
 use FveMonitor\Lib\Database;
 
@@ -230,12 +231,11 @@ $p = $plant ?? $defaults;
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </head>
 <body>
-<header class="topbar">
-    <h1>⚙️ <?= $id ? 'Upravit elektrárnu' : 'Nová elektrárna' ?></h1>
-    <div class="topbar-meta">
-        <a href="index.php" class="btn btn-ghost">← Zpět na seznam</a>
-    </div>
-</header>
+<?php
+$pageHeading = '⚙️ ' . ($id ? 'Upravit elektrárnu' : 'Nová elektrárna');
+$activePage  = $id ? 'admin' : 'admin_plant_edit';
+require __DIR__ . '/../_topbar.php';
+?>
 
 <main>
     <?php if ($notice): ?>

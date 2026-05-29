@@ -49,6 +49,8 @@ try {
         'weather_summary'         => actionWeatherSummary(),
         'spot_prices'             => actionSpotPrices($_GET['from'] ?? null, $_GET['to'] ?? null, $_GET['day'] ?? null, $_GET['granularity'] ?? 'hour'),
         'spot_calculator'         => actionSpotCalculator(),
+        'distribution_list'       => actionDistributionList($_GET['from'] ?? null, $_GET['to'] ?? null),
+        'distribution_save'       => actionDistributionSave(),
         default    => ['error' => 'Neznámá akce: ' . $action],
     };
     echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -1366,5 +1368,220 @@ function spotDt15Stats(array $rows, string $eurKey = 'price_15min_eur', string $
         'avg_czk' => round(array_sum($czk) / count($czk), 2),
         'max_czk' => round(max($czk), 2),
         'negative_periods' => $neg,
+    ];
+}
+
+/**
+ * GET ?action=distribution_list&from=YYYY-MM&to=YYYY-MM
+ *
+ * Vrací matrix data pro admin/distribution_data.php:
+ * - seznam aktivních FVE s ote_id (jen ty, které se reportují do POZE)
+ * - existující hodnoty grid_export_kwh / grid_import_kwh za zadané období
+ *
+ * Default rozsah: posledních 12 měsíců (od dnes - 11 měsíců až dnes).
+ *
+ * Návratová struktura:
+ *   {
+ *     "months": ["2025-06", "2025-07", ...],     // chronologicky
+ *     "plants": [
+ *       {
+ *         "id": 3,
+ *         "code": "ZLIN-01-CZ",
+ *         "name": "Monkstone Zlín",
+ *         "ote_id": "043786_Z11",
+ *         "data": {
+ *           "2025-09": {"export": 1159, "import": 71827, "invoice_ref": null, "notes": null},
+ *           "2025-10": null
+ *         }
+ *       }, ...
+ *     ]
+ *   }
+ */
+function actionDistributionList(?string $from, ?string $to): array
+{
+    // Default: posledních 12 měsíců
+    if ($from === null || !preg_match('/^\d{4}-\d{2}$/', $from)) {
+        $from = date('Y-m', strtotime('-11 months'));
+    }
+    if ($to === null || !preg_match('/^\d{4}-\d{2}$/', $to)) {
+        $to = date('Y-m');
+    }
+
+    // Vygeneruj seznam měsíců [from, to]
+    $months = [];
+    $cur = strtotime($from . '-01');
+    $end = strtotime($to . '-01');
+    while ($cur <= $end) {
+        $months[] = date('Y-m', $cur);
+        $cur = strtotime('+1 month', $cur);
+    }
+
+    $pdo = Database::pdo();
+
+    // FVE, které se reportují do POZE (mají ote_id)
+    $plants = $pdo->query(
+        "SELECT id, code, name, ote_id, ote_vyrobna_id, peak_power_kwp
+         FROM plants
+         WHERE is_active = 1 AND ote_id IS NOT NULL AND ote_id <> ''
+         ORDER BY name"
+    )->fetchAll(\PDO::FETCH_ASSOC);
+
+    // Načti všechna existující data pro tyto FVE v rozsahu
+    if (count($plants) > 0) {
+        $plantIds = array_column($plants, 'id');
+        $placeholders = implode(',', array_fill(0, count($plantIds), '?'));
+        $sql = "SELECT plant_id, `year_month`, grid_export_kwh, grid_import_kwh, invoice_ref, notes, updated_at
+                FROM distribution_monthly
+                WHERE plant_id IN ($placeholders)
+                  AND `year_month` BETWEEN ? AND ?
+                ORDER BY plant_id, `year_month`";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(array_merge($plantIds, [$from, $to]));
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    } else {
+        $rows = [];
+    }
+
+    // Indexuj data: [plant_id][year_month] => row
+    $byPlant = [];
+    foreach ($rows as $r) {
+        $byPlant[(int) $r['plant_id']][$r['year_month']] = [
+            'export'      => $r['grid_export_kwh'] !== null ? (float) $r['grid_export_kwh'] : null,
+            'import'      => $r['grid_import_kwh'] !== null ? (float) $r['grid_import_kwh'] : null,
+            'invoice_ref' => $r['invoice_ref'],
+            'notes'       => $r['notes'],
+            'updated_at'  => $r['updated_at'],
+        ];
+    }
+
+    // Sestav výstup s kompletní mřížkou (NULL pro chybějící buňky)
+    $out = [];
+    foreach ($plants as $p) {
+        $data = [];
+        foreach ($months as $m) {
+            $data[$m] = $byPlant[(int) $p['id']][$m] ?? null;
+        }
+        $out[] = [
+            'id'             => (int) $p['id'],
+            'code'           => $p['code'],
+            'name'           => $p['name'],
+            'ote_id'         => $p['ote_id'],
+            'ote_vyrobna_id' => $p['ote_vyrobna_id'],
+            'peak_power_kwp' => (float) $p['peak_power_kwp'],
+            'data'           => $data,
+        ];
+    }
+
+    return [
+        'from'   => $from,
+        'to'     => $to,
+        'months' => $months,
+        'plants' => $out,
+    ];
+}
+
+/**
+ * POST ?action=distribution_save
+ *
+ * Body (JSON):
+ *   {
+ *     "plant_id": 3,
+ *     "year_month": "2025-09",
+ *     "field": "export" | "import",       // nebo "invoice_ref" / "notes"
+ *     "value": 1159.5                      // nebo null pro vymazání
+ *   }
+ *
+ * Upsert do distribution_monthly. Vyžaduje přihlášení.
+ */
+function actionDistributionSave(): array
+{
+    if (!\FveMonitor\Lib\Auth::isLoggedIn()) {
+        http_response_code(401);
+        return ['error' => 'Vyžaduje přihlášení'];
+    }
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        return ['error' => 'POST only'];
+    }
+
+    $raw  = file_get_contents('php://input');
+    $body = json_decode($raw, true);
+    if (!is_array($body)) {
+        http_response_code(400);
+        return ['error' => 'Invalid JSON'];
+    }
+
+    $plantId   = (int) ($body['plant_id'] ?? 0);
+    $yearMonth = (string) ($body['year_month'] ?? '');
+    $field     = (string) ($body['field'] ?? '');
+    $value     = $body['value'] ?? null;
+
+    if ($plantId <= 0)                                       { http_response_code(400); return ['error' => 'plant_id']; }
+    if (!preg_match('/^\d{4}-\d{2}$/', $yearMonth))          { http_response_code(400); return ['error' => 'year_month formát YYYY-MM']; }
+    if (!in_array($field, ['export', 'import', 'invoice_ref', 'notes'], true)) {
+        http_response_code(400);
+        return ['error' => 'field musí být export/import/invoice_ref/notes'];
+    }
+
+    // Mapování field → DB sloupec
+    $colMap = [
+        'export'      => 'grid_export_kwh',
+        'import'      => 'grid_import_kwh',
+        'invoice_ref' => 'invoice_ref',
+        'notes'       => 'notes',
+    ];
+    $col = $colMap[$field];
+
+    // Validace hodnoty podle typu
+    if ($field === 'export' || $field === 'import') {
+        if ($value !== null && $value !== '') {
+            if (!is_numeric($value) || (float) $value < 0) {
+                http_response_code(400);
+                return ['error' => 'Hodnota musí být nezáporné číslo'];
+            }
+            $value = (float) $value;
+        } else {
+            $value = null;
+        }
+    } else {
+        // invoice_ref, notes — string nebo null
+        if ($value === '') $value = null;
+        if ($value !== null) $value = (string) $value;
+    }
+
+    $pdo = Database::pdo();
+
+    // Ověř že plant existuje a je aktivní s ote_id
+    $stmt = $pdo->prepare("SELECT id FROM plants WHERE id = ? AND is_active = 1 AND ote_id IS NOT NULL AND ote_id <> ''");
+    $stmt->execute([$plantId]);
+    if (!$stmt->fetchColumn()) {
+        http_response_code(404);
+        return ['error' => 'FVE nenalezena nebo nemá OTE_ID'];
+    }
+
+    // Upsert
+    $sql = "INSERT INTO distribution_monthly (plant_id, `year_month`, $col, source)
+            VALUES (?, ?, ?, 'manual')
+            ON DUPLICATE KEY UPDATE $col = VALUES($col), source = 'manual'";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$plantId, $yearMonth, $value]);
+
+    // Vrať aktualizovaný řádek
+    $stmt = $pdo->prepare(
+        "SELECT grid_export_kwh, grid_import_kwh, invoice_ref, notes, updated_at
+         FROM distribution_monthly WHERE plant_id = ? AND `year_month` = ?"
+    );
+    $stmt->execute([$plantId, $yearMonth]);
+    $row = $stmt->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+    return [
+        'ok'         => true,
+        'plant_id'   => $plantId,
+        'year_month' => $yearMonth,
+        'export'     => $row['grid_export_kwh'] !== null ? (float) $row['grid_export_kwh'] : null,
+        'import'     => $row['grid_import_kwh'] !== null ? (float) $row['grid_import_kwh'] : null,
+        'invoice_ref'=> $row['invoice_ref'] ?? null,
+        'notes'      => $row['notes'] ?? null,
+        'updated_at' => $row['updated_at'] ?? null,
     ];
 }

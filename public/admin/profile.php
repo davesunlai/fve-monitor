@@ -132,14 +132,11 @@ $credentials = Passkey::getUserCredentials((int) $user['id']);
     </style>
 </head>
 <body>
-<header class="topbar">
-    <h1>👤 Profil</h1>
-    <div style="margin-left:auto;color:var(--text-dim);font-size:0.85rem">
-        <a href="index.php" style="color:var(--text-dim)">← Admin</a>
-        · <?= htmlspecialchars($user['full_name'] ?? $user['username']) ?>
-        · <a href="logout.php" style="color:var(--text-dim)">Odhlásit</a>
-    </div>
-</header>
+<?php
+$pageHeading = '👤 Profil';
+$activePage  = 'profile';
+require __DIR__ . '/../_topbar.php';
+?>
 
 <main>
     <div class="profile-card">

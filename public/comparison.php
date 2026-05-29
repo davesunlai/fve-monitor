@@ -4,12 +4,10 @@ require __DIR__ . '/../bootstrap.php';
 
 use FveMonitor\Lib\Database;
 use FveMonitor\Lib\Auth;
+use FveMonitor\Lib\Acl;
 
 Auth::start();
-if (!Auth::isLoggedIn()) {
-    header('Location: admin/login.php?r=' . urlencode($_SERVER['REQUEST_URI']));
-    exit;
-}
+Acl::requireAccess('comparison');
 $user = Auth::currentUser();
 
 // ─── Filter parametry ───

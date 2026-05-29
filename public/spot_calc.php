@@ -3,12 +3,10 @@ declare(strict_types=1);
 require __DIR__ . '/../bootstrap.php';
 
 use FveMonitor\Lib\Auth;
+use FveMonitor\Lib\Acl;
 
 Auth::start();
-if (!Auth::isLoggedIn()) {
-    header('Location: admin/login.php?r=' . urlencode($_SERVER['REQUEST_URI']));
-    exit;
-}
+Acl::requireAccess('spot_calc');
 
 // Předvyplnění z URL nebo defaulty (D57d - elektrické topení Kopřivnice)
 $now = new DateTimeImmutable('now', new DateTimeZone('Europe/Prague'));

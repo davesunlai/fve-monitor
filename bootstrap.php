@@ -33,4 +33,9 @@ if (!is_dir($config['app']['log_dir'])) {
     @mkdir($config['app']['log_dir'], 0755, true);
 }
 
+// Activity tracking (heartbeat) — tichý, nesmí shodit aplikaci
+if (PHP_SAPI !== 'cli') {
+    \FveMonitor\Lib\ActivityTracker::track();
+}
+
 return $config;

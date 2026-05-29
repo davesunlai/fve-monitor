@@ -3,12 +3,10 @@ declare(strict_types=1);
 require __DIR__ . '/../bootstrap.php';
 
 use FveMonitor\Lib\Auth;
+use FveMonitor\Lib\Acl;
 use FveMonitor\Lib\Database;
 
-if (!Auth::isLoggedIn()) {
-    header('Location: admin/login.php?r=' . urlencode($_SERVER['REQUEST_URI']));
-    exit;
-}
+Acl::requireAccess('performance');
 
 $user = Auth::currentUser();
 

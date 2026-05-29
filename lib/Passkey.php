@@ -239,6 +239,7 @@ class Passkey
             );
 
             if (!$row) {
+                Auth::logLoginEvent(null, '(passkey)', 'login_fail', 'passkey', 'unknown_credential');
                 return ['success' => false, 'error' => 'Neznámý passkey'];
             }
 
@@ -289,6 +290,16 @@ class Passkey
 
             unset($_SESSION['webauthn_login_options']);
 
+            // Audit log (passkey success)
+            $logId = Auth::logLoginEvent(
+                (int) $row['user_id'],
+                (string) $row['username'],
+                'login_success',
+                'passkey',
+                null
+            );
+            if ($logId) $_SESSION['login_log_id'] = $logId;
+
             return [
                 'success' => true,
                 'user' => [
@@ -298,6 +309,14 @@ class Passkey
                 ],
             ];
         } catch (\Throwable $e) {
+            // Audit log (passkey fail)
+            Auth::logLoginEvent(
+                null,
+                '(passkey)',
+                'login_fail',
+                'passkey',
+                substr($e->getMessage(), 0, 64)
+            );
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }

@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/_auth.php';
+\FveMonitor\Lib\Acl::requireAccess('admin_import_csv');
 
 use FveMonitor\Lib\Database;
 use FveMonitor\Lib\Auth;
@@ -381,15 +382,11 @@ function doImport(array $rows, string $strategy): array
     </style>
 </head>
 <body>
-<header class="topbar">
-    <h1>📥 Import CSV z iSolarCloud</h1>
-    <div style="margin-left:auto;color:var(--text-dim);font-size:0.85rem">
-        <a href="index.php" style="color:var(--text-dim)">← Admin</a>
-        · <a href="ote_report.php" style="color:var(--text-dim)">📊 OTE výkaz</a>
-        · <?= htmlspecialchars($user['full_name'] ?? $user['username']) ?>
-        · <a href="logout.php" style="color:var(--text-dim)">Odhlásit</a>
-    </div>
-</header>
+<?php
+$pageHeading = '📥 Import CSV z iSolarCloud';
+$activePage  = 'admin_import_csv';
+require __DIR__ . '/../_topbar.php';
+?>
 
 <main>
     <div class="help-text">

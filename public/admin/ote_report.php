@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/_auth.php';
+\FveMonitor\Lib\Acl::requireAccess('admin_ote_report');
 
 use FveMonitor\Lib\Database;
 use FveMonitor\Lib\Auth;
@@ -358,15 +359,11 @@ $months = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen',
     </style>
 </head>
 <body>
-<header class="topbar">
-    <h1>📊 OTE měsíční výkaz</h1>
-    <div style="margin-left:auto;color:var(--text-dim);font-size:0.85rem">
-        <a href="index.php" style="color:var(--text-dim)">← Admin</a>
-        · <a href="plants_ote.php" style="color:var(--text-dim)">🏛️ Metadata</a>
-        · <?= htmlspecialchars($user['full_name'] ?? $user['username']) ?>
-        · <a href="logout.php" style="color:var(--text-dim)">Odhlásit</a>
-    </div>
-</header>
+<?php
+$pageHeading = '📊 OTE měsíční výkaz';
+$activePage  = 'admin_ote_report';
+require __DIR__ . '/../_topbar.php';
+?>
 
 <main>
     <!-- Výběr období -->

@@ -38,12 +38,23 @@ class Auth
      */
     public static function login(string $username, string $password): ?array
     {
+        // Neaktivní/neexistující uživatel
         $user = Database::one(
-            'SELECT * FROM users WHERE username = ? AND is_active = 1',
+            'SELECT * FROM users WHERE username = ?',
             [$username]
         );
-        if (!$user) return null;
-        if (!password_verify($password, $user['password_hash'])) return null;
+        if (!$user) {
+            self::logLoginEvent(null, $username, 'login_fail', 'password', 'unknown_user');
+            return null;
+        }
+        if (!(int)$user['is_active']) {
+            self::logLoginEvent((int)$user['id'], $username, 'login_fail', 'password', 'inactive');
+            return null;
+        }
+        if (!password_verify($password, $user['password_hash'])) {
+            self::logLoginEvent((int)$user['id'], $username, 'login_fail', 'password', 'bad_password');
+            return null;
+        }
 
         self::start();
         session_regenerate_id(true);  // nové session ID (proti session fixation)
@@ -56,12 +67,35 @@ class Auth
         Database::pdo()->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')
             ->execute([$user['id']]);
 
+        // Log success + ulož log_id do session pro spárování s logoutem
+        $logId = self::logLoginEvent((int)$user['id'], $username, 'login_success', 'password', null);
+        if ($logId) $_SESSION['login_log_id'] = $logId;
+
         return $user;
     }
 
     public static function logout(): void
     {
         self::start();
+
+        // Uzavři odpovídající záznam v admin_login_log
+        $logId   = $_SESSION['login_log_id'] ?? null;
+        $userId  = $_SESSION['user_id'] ?? null;
+        $uname   = $_SESSION['username'] ?? '';
+        if ($logId) {
+            try {
+                Database::pdo()
+                    ->prepare('UPDATE admin_login_log SET logged_out_at = NOW() WHERE id = ? AND logged_out_at IS NULL')
+                    ->execute([(int)$logId]);
+            } catch (\Throwable $e) {
+                error_log('Auth::logout update failed: ' . $e->getMessage());
+            }
+        }
+        // Samostatný řádek "logout" pro audit
+        if ($userId) {
+            self::logLoginEvent((int)$userId, (string)$uname, 'logout', 'password', null);
+        }
+
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
             $p = session_get_cookie_params();
@@ -113,6 +147,36 @@ class Auth
         if ($user['role'] !== $role && $user['role'] !== 'admin') {
             http_response_code(403);
             die('Nedostatečné oprávnění');
+        }
+    }
+
+    /**
+     * Zápis do admin_login_log. Tichý — selhání nesmí shodit auth flow.
+     * @return int|null vložené ID, nebo null při chybě
+     */
+    public static function logLoginEvent(
+        ?int $userId,
+        string $username,
+        string $event,
+        string $method = 'password',
+        ?string $failReason = null
+    ): ?int {
+        try {
+            $ip = ActivityTracker::clientIp();
+            $ua = ActivityTracker::userAgent();
+            $sk = ($event === 'login_success') ? ActivityTracker::sessionKey() : null;
+
+            $pdo = Database::pdo();
+            $pdo->prepare('
+                INSERT INTO admin_login_log
+                    (user_id, username, event, method, fail_reason, ip, user_agent, session_key)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ')->execute([$userId, $username, $event, $method, $failReason, $ip, $ua, $sk]);
+
+            return (int) $pdo->lastInsertId();
+        } catch (\Throwable $e) {
+            error_log('Auth::logLoginEvent failed: ' . $e->getMessage());
+            return null;
         }
     }
 }

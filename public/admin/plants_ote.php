@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/_auth.php';
+\FveMonitor\Lib\Acl::requireAccess('admin_plants_ote');
 
 use FveMonitor\Lib\Database;
 use FveMonitor\Lib\Auth;
@@ -226,14 +227,11 @@ $plants = Database::all(
 </style>
 </head>
 <body>
-<header class="topbar">
-    <h1>🏛️ OTE / ERÚ metadata</h1>
-    <div style="margin-left:auto;color:var(--text-dim);font-size:0.85rem">
-        <a href="index.php" style="color:var(--text-dim)">← Admin</a>
-        · <?= htmlspecialchars($user['full_name'] ?? $user['username']) ?>
-        · <a href="logout.php" style="color:var(--text-dim)">Odhlásit</a>
-    </div>
-</header>
+<?php
+$pageHeading = '🏛️ OTE / ERÚ metadata';
+$activePage  = 'admin_plants_ote';
+require __DIR__ . '/../_topbar.php';
+?>
 
 <main>
     <?php if ($msg): ?>

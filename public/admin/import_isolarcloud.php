@@ -6,6 +6,7 @@
  * a porovná s DB (provider_ps_id) - rozdělí na NOVÉ / UPDATE / SKIP.
  */
 require __DIR__ . '/_auth.php';
+\FveMonitor\Lib\Acl::requireAccess('admin_import_isolar');
 
 use FveMonitor\Lib\Database;
 use FveMonitor\Lib\ISolarCloudProvider;
@@ -55,12 +56,11 @@ unset($s);
 <link rel="stylesheet" href="admin.css">
 </head>
 <body>
-<header class="topbar">
-    <h1>⬇ Import z iSolarCloud</h1>
-    <div class="topbar-meta">
-        <a href="index.php" class="btn btn-ghost">← Zpět na seznam</a>
-    </div>
-</header>
+<?php
+$pageHeading = '⬇ Import z iSolarCloud';
+$activePage  = 'admin_import_isolar';
+require __DIR__ . '/../_topbar.php';
+?>
 
 <main>
     <?php foreach ($errors as $e): ?>
