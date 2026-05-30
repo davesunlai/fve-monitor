@@ -70,7 +70,7 @@ require __DIR__ . '/_topbar.php';
                         <th class="col-num">Plnění</th>
                         <th class="col-weather">Předpověď</th>
                         <th class="col-num">Update</th>
-                        <th class="col-sparkline">4denní průběh</th>
+                        <th class="col-sparkline">2denní průběh</th>
                         <th class="col-num">Alarmy</th>
                     </tr>
                 </thead>
