@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.62.6 — 2026-06-04 — WeatherAPI fallback pro hodinovou předpověď
+
+### Přidáno
+- `tryWeatherApiHourly()` helper pro hodinovou předpověď (4 dny = 96 bodů)
+- `actionWeatherPrediction` (graf detailu FVE) má fallback na WeatherAPI
+
+### Opraveno
+- Modrá čára "Předpověď počasí" v grafu detailu FVE už funguje
+  i během výpadku Open-Meteo
+
+---
+
 ## v0.62.4 — 2026-06-04 — DB cache pro weather forecast
 
 ### Přidáno
