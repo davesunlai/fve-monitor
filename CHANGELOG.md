@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## v0.62.4 — 2026-06-04 — DB cache pro weather forecast
+
+### Přidáno
+- Nová tabulka `weather_forecast_cache` (plant_id + forecast_date primary key)
+- Cache hit < 6 hodin: rychlá DB query, žádné HTTP volání
+- Cache miss: zavolá Open-Meteo a uloží do DB
+- Fallback: při výpadku Open-Meteo vrátí poslední dostupnou cache
+
+### Změněno
+- CURLOPT_TIMEOUT zvýšen 5s → 8s
+
+### Opraveno
+- Dashboard rychlejší (žádné 9× synchronní HTTP volání)
+- Odolnost vůči výpadkům Open-Meteo (např. 502 Bad Gateway dnes)
+
+---
+
 ## v0.62.3 — 2026-06-04 — Úklid serveru
 
 ### Změněno
