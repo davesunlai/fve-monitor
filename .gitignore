@@ -30,3 +30,4 @@ Thumbs.db
 *.swp
 *.swo
 nohup.out
+config/weather.local.php

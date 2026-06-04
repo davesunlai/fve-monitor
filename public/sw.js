@@ -224,3 +224,4 @@ self.addEventListener('message', event => {
 // Deploy yearly chart v0.62: 1777601040
 // Deploy v0.62.3: 1780573024
 // Deploy weather cache v0.62.4: 1780579365
+// Deploy weather fallback v0.62.5: 1780580175

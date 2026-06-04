@@ -666,7 +666,25 @@ function actionWeatherSummary(): array
         curl_close($ch);
 
         if (!$raw || $httpCode !== 200) {
-            $apiFailed++;
+            // Open-Meteo selhal - zkus WeatherAPI.com jako fallback
+            $fallbackDays = tryWeatherApi($lat, $lon, $kwp);
+            if ($fallbackDays !== null) {
+                foreach ($fallbackDays as $d) {
+                    Database::pdo()->prepare(
+                        "INSERT INTO weather_forecast_cache
+                            (plant_id, forecast_date, weather_code, tmax_c, est_kwh)
+                         VALUES (?, ?, ?, ?, ?)
+                         ON DUPLICATE KEY UPDATE
+                            weather_code = VALUES(weather_code),
+                            tmax_c = VALUES(tmax_c),
+                            est_kwh = VALUES(est_kwh),
+                            fetched_at = NOW()"
+                    )->execute([(int)$p['id'], $d['date'], $d['weather_code'], $d['tmax'], $d['est_kwh']]);
+                }
+                $result[(int)$p['id']] = $fallbackDays;
+            } else {
+                $apiFailed++;
+            }
             continue;
         }
 
@@ -1663,4 +1681,103 @@ function actionDistributionSave(): array
         'notes'      => $row['notes'] ?? null,
         'updated_at' => $row['updated_at'] ?? null,
     ];
+}
+
+/**
+ * Helper: zavolá WeatherAPI.com pro 1 FVE, vrátí dny nebo null při selhání.
+ */
+function tryWeatherApi(float $lat, float $lon, float $kwp): ?array
+{
+    // Načti API key z lokálního konfigu (mimo git)
+    $keyFile = __DIR__ . '/../config/weather.local.php';
+    if (!file_exists($keyFile)) return null;
+    $cfg = require $keyFile;
+    $key = $cfg['weatherapi_key'] ?? '';
+    if (!$key) return null;
+
+    $url = "https://api.weatherapi.com/v1/forecast.json?"
+         . "key={$key}&q={$lat},{$lon}&days=3&aqi=no&alerts=no";
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 8,
+        CURLOPT_SSL_VERIFYPEER => true,
+    ]);
+    $raw = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if (!$raw || $httpCode !== 200) return null;
+
+    $data = json_decode($raw, true);
+    $forecastDays = $data['forecast']['forecastday'] ?? [];
+    if (empty($forecastDays)) return null;
+
+    // Mapování WeatherAPI condition.code → WMO weather_code (Open-Meteo formát)
+    // WeatherAPI používá vlastní kódy 1000-1282, my chceme WMO 0-99
+    $mapToWmo = function(int $code): int {
+        // Zjednodušené mapování - nejdůležitější kódy
+        $map = [
+            1000 => 0,   // Sunny / Clear
+            1003 => 1,   // Partly cloudy
+            1006 => 2,   // Cloudy
+            1009 => 3,   // Overcast
+            1030 => 45,  // Mist
+            1063 => 61,  // Patchy rain
+            1066 => 71,  // Patchy snow
+            1069 => 67,  // Patchy sleet
+            1087 => 95,  // Thundery
+            1135 => 45,  // Fog
+            1147 => 48,  // Freezing fog
+            1150 => 51,  // Light drizzle patchy
+            1153 => 53,  // Light drizzle
+            1180 => 61,  // Patchy light rain
+            1183 => 61,  // Light rain
+            1186 => 63,  // Moderate rain at times
+            1189 => 63,  // Moderate rain
+            1192 => 65,  // Heavy rain at times
+            1195 => 65,  // Heavy rain
+            1210 => 71,  // Patchy light snow
+            1213 => 71,  // Light snow
+            1216 => 73,  // Moderate snow at times
+            1219 => 73,  // Moderate snow
+            1222 => 75,  // Heavy snow at times
+            1225 => 75,  // Heavy snow
+            1273 => 95,  // Patchy light rain with thunder
+            1276 => 95,  // Moderate or heavy rain with thunder
+        ];
+        return $map[$code] ?? 1;
+    };
+
+    $days = [];
+    foreach ($forecastDays as $fd) {
+        $date = $fd['date'] ?? null;
+        if (!$date) continue;
+        $day = $fd['day'] ?? [];
+
+        // WeatherAPI nedává radiation - aproximujeme z slunečních hodin a UV
+        // Lépe: použijeme totalprecip a uv index
+        $tmax = (int)round((float)($day['maxtemp_c'] ?? 0));
+        $uv   = (float)($day['uv'] ?? 0);
+        $cloudCover = (float)($day['daily_chance_of_rain'] ?? 50); // 0-100
+        $code = (int)($day['condition']['code'] ?? 1000);
+
+        // Odhad denní radiace pro Českou republiku v dubnu-červnu:
+        // - jasný den: ~20 MJ/m² (5.5 kWh/m²)
+        // - zatažený den: ~5 MJ/m² (1.4 kWh/m²)
+        // Použijeme UV index jako proxy pro radiaci (UV vs cloud cover)
+        $clearSkyRad = 20.0; // MJ/m² jasný den
+        $cloudFactor = 1 - ($cloudCover / 100) * 0.7; // 30% i v dešti
+        $estRad = $clearSkyRad * $cloudFactor;
+        $estKwh = (int)round($estRad * $kwp * 0.8 / 3.6, 0);
+
+        $days[] = [
+            'date'         => $date,
+            'weather_code' => $mapToWmo($code),
+            'tmax'         => $tmax,
+            'est_kwh'      => $estKwh,
+        ];
+    }
+
+    return empty($days) ? null : $days;
 }
