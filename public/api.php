@@ -613,6 +613,38 @@ function actionWeatherSummary(): array
         'SELECT id, latitude, longitude, peak_power_kwp FROM plants WHERE is_active = 1'
     );
     $result = [];
+
+    // Cache check - pokud je <6 hodin staré, vrátit z DB bez API volání
+    $cacheAge = Database::one(
+        "SELECT TIMESTAMPDIFF(MINUTE, MAX(fetched_at), NOW()) AS age_min FROM weather_forecast_cache"
+    );
+    $cacheFresh = ($cacheAge && $cacheAge['age_min'] !== null && (int)$cacheAge['age_min'] < 360);
+
+    if ($cacheFresh) {
+        $rows = Database::all(
+            "SELECT plant_id, forecast_date, weather_code, tmax_c, est_kwh
+             FROM weather_forecast_cache
+             WHERE forecast_date >= CURDATE()
+             ORDER BY plant_id, forecast_date"
+        );
+        foreach ($rows as $r) {
+            $result[(int)$r['plant_id']][] = [
+                'date'         => $r['forecast_date'],
+                'weather_code' => (int)$r['weather_code'],
+                'tmax'         => (int)$r['tmax_c'],
+                'est_kwh'      => (int)$r['est_kwh'],
+            ];
+        }
+        return [
+            'plants' => $result,
+            'generated_at' => date('c'),
+            'from_cache' => true,
+            'cache_age_min' => (int)$cacheAge['age_min'],
+        ];
+    }
+
+    // Zavolat Open-Meteo
+    $apiFailed = 0;
     foreach ($plants as $p) {
         $lat = (float)$p['latitude'];
         $lon = (float)$p['longitude'];
@@ -623,16 +655,20 @@ function actionWeatherSummary(): array
              . "latitude={$lat}&longitude={$lon}"
              . "&daily=weather_code,temperature_2m_max,shortwave_radiation_sum"
              . "&forecast_days=3&timezone=Europe%2FPrague";
-
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_TIMEOUT        => 8,
             CURLOPT_SSL_VERIFYPEER => true,
         ]);
         $raw = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-        if (!$raw) continue;
+
+        if (!$raw || $httpCode !== 200) {
+            $apiFailed++;
+            continue;
+        }
 
         $data = json_decode($raw, true);
         $dates = $data['daily']['time'] ?? [];
@@ -642,19 +678,62 @@ function actionWeatherSummary(): array
 
         $days = [];
         foreach ($dates as $i => $d) {
-            // Odhad výroby: radiace [MJ/m²] * kWp * 0.8 (PR) / 3.6 (MJ→kWh)
             $rad = (float)($rads[$i] ?? 0);
-            $estKwh = round($rad * $kwp * 0.8 / 3.6, 0);
+            $estKwh = (int)round($rad * $kwp * 0.8 / 3.6, 0);
+            $code = (int)($codes[$i] ?? 0);
+            $tmax = (int)round((float)($temps[$i] ?? 0));
+
             $days[] = [
                 'date'         => $d,
-                'weather_code' => (int)($codes[$i] ?? 0),
-                'tmax'         => round((float)($temps[$i] ?? 0)),
+                'weather_code' => $code,
+                'tmax'         => $tmax,
                 'est_kwh'      => $estKwh,
             ];
+
+            Database::pdo()->prepare(
+                "INSERT INTO weather_forecast_cache
+                    (plant_id, forecast_date, weather_code, tmax_c, est_kwh)
+                 VALUES (?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                    weather_code = VALUES(weather_code),
+                    tmax_c = VALUES(tmax_c),
+                    est_kwh = VALUES(est_kwh),
+                    fetched_at = NOW()"
+            )->execute([(int)$p['id'], $d, $code, $tmax, $estKwh]);
         }
-        $result[$p['id']] = $days;
+        $result[(int)$p['id']] = $days;
     }
-    return ['plants' => $result, 'generated_at' => date('c')];
+
+    // Pokud API selhalo celkově, použij starou cache jako fallback
+    if (empty($result)) {
+        $rows = Database::all(
+            "SELECT plant_id, forecast_date, weather_code, tmax_c, est_kwh
+             FROM weather_forecast_cache
+             WHERE forecast_date >= CURDATE()
+             ORDER BY plant_id, forecast_date"
+        );
+        foreach ($rows as $r) {
+            $result[(int)$r['plant_id']][] = [
+                'date'         => $r['forecast_date'],
+                'weather_code' => (int)$r['weather_code'],
+                'tmax'         => (int)$r['tmax_c'],
+                'est_kwh'      => (int)$r['est_kwh'],
+            ];
+        }
+        return [
+            'plants' => $result,
+            'generated_at' => date('c'),
+            'from_cache' => true,
+            'api_failed' => $apiFailed,
+        ];
+    }
+
+    return [
+        'plants' => $result,
+        'generated_at' => date('c'),
+        'from_cache' => false,
+        'api_failed' => $apiFailed,
+    ];
 }
 
 

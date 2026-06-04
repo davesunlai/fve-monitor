@@ -1,4 +1,4 @@
 {
-  "version": "0.62.3",
-  "message": "🧹 Verze 0.62.3 - úklid serveru: vypnutí Grafany a InfluxDB"
+  "version": "0.62.4",
+  "message": "🌤️ Verze 0.62.4 - cache předpovědí + odolnost vůči výpadku Open-Meteo"
 }

@@ -223,3 +223,4 @@ self.addEventListener('message', event => {
 // Deploy month labels v0.62.1: 1777600379
 // Deploy yearly chart v0.62: 1777601040
 // Deploy v0.62.3: 1780573024
+// Deploy weather cache v0.62.4: 1780579365

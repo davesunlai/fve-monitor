@@ -28,6 +28,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'clean
             $stmt = Database::pdo()->prepare("DELETE FROM `$t` WHERE `$col` < ?");
             $stmt->execute([$before . ' 00:00:00']);
             $deleted[$t] = $stmt->rowCount();
+            // Uvolni místo na disku (InnoDB drží "free space" po DELETE)
+            if ($deleted[$t] > 0) {
+                Database::pdo()->exec("OPTIMIZE TABLE `$t`");
+            }
         }
         $parts = [];
         foreach ($deleted as $t => $n) $parts[] = "$t: $n";
