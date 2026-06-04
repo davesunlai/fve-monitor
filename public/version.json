@@ -1,4 +1,4 @@
 {
-  "version": "0.62.5",
-  "message": "🌤️ Verze 0.62.5 - WeatherAPI fallback při výpadku Open-Meteo"
+  "version": "0.62.6",
+  "message": "🌤️ Verze 0.62.6 - WeatherAPI fallback i pro hodinovou předpověď v grafu"
 }

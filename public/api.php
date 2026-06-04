@@ -546,8 +546,51 @@ function actionWeatherPrediction(int $plantId): array
     ]);
     $raw = curl_exec($ch);
     $err = curl_error($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    if ($raw === false || $raw === '') throw new \RuntimeException('Open-Meteo API nedostupné: ' . $err);
+
+    // Fallback na WeatherAPI při selhání Open-Meteo
+    if ($raw === false || $raw === '' || $httpCode !== 200) {
+        $fallbackForecast = tryWeatherApiHourly($lat, $lon, $kwp, (int)$tilt, (int)$azimuth, $loss);
+        if ($fallbackForecast !== null) {
+            // Použij fallback a vrať s PVGIS profilem
+            $month = (int) date('n');
+            $pvgisRow = Database::one(
+                'SELECT SUM(e_m_kwh) as energy_kwh FROM pvgis_monthly WHERE plant_id = ? AND month = ?',
+                [$plantId, $month]
+            );
+            $pvgisMonthKwh = (float) ($pvgisRow['energy_kwh'] ?? 0);
+            $daysInMonth  = (int) date('t');
+            $pvgisDayKwh  = $pvgisMonthKwh / $daysInMonth;
+
+            $pvgisProfile = [];
+            $startDate = new \DateTime('today midnight');
+            for ($d = 0; $d < 4; $d++) {
+                $day = clone $startDate;
+                $day->modify("+{$d} days");
+                $scale = $pvgisDayKwh > 0 ? $pvgisDayKwh / 7.5 : 0;
+                for ($h = 0; $h < 24; $h++) {
+                    $kw = 0;
+                    if ($h >= 6 && $h <= 20) {
+                        $pos = ($h - 6) / 14.0;
+                        $kw  = round($scale * sin(M_PI * $pos), 3);
+                    }
+                    $ts = $day->format('Y-m-d') . ' ' . str_pad((string)$h, 2, '0', STR_PAD_LEFT) . ':00:00';
+                    $pvgisProfile[] = ['ts' => $ts, 'power_kw' => max(0, $kw)];
+                }
+            }
+
+            return [
+                'plant_id'       => $plantId,
+                'forecast'       => $fallbackForecast,
+                'pvgis_profile'  => $pvgisProfile,
+                'pvgis_day_kwh'  => round($pvgisDayKwh, 2),
+                'generated_at'   => date('c'),
+                'source'         => 'weatherapi_fallback',
+            ];
+        }
+        throw new \RuntimeException('Open-Meteo API nedostupné: ' . $err);
+    }
 
     $data = json_decode($raw, true);
     $times = $data['hourly']['time'] ?? [];
@@ -1681,6 +1724,68 @@ function actionDistributionSave(): array
         'notes'      => $row['notes'] ?? null,
         'updated_at' => $row['updated_at'] ?? null,
     ];
+}
+
+
+/**
+ * Helper: zavolá WeatherAPI.com pro hodinovou předpověď (4 dny).
+ * Vrátí array [{ts, power_kw}] nebo null při selhání.
+ */
+function tryWeatherApiHourly(float $lat, float $lon, float $kwp, int $tilt, int $azimuth, float $loss): ?array
+{
+    $keyFile = __DIR__ . '/../config/weather.local.php';
+    if (!file_exists($keyFile)) return null;
+    $cfg = require $keyFile;
+    $key = $cfg['weatherapi_key'] ?? '';
+    if (!$key) return null;
+
+    $url = "https://api.weatherapi.com/v1/forecast.json?"
+         . "key={$key}&q={$lat},{$lon}&days=4&aqi=no&alerts=no";
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => true,
+    ]);
+    $raw = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if (!$raw || $httpCode !== 200) return null;
+    $data = json_decode($raw, true);
+    $days = $data['forecast']['forecastday'] ?? [];
+    if (empty($days)) return null;
+
+    $pr = 0.80;
+    $forecast = [];
+
+    foreach ($days as $day) {
+        $hours = $day['hour'] ?? [];
+        foreach ($hours as $h) {
+            $time = $h['time'] ?? null; // "2026-06-04 14:00"
+            if (!$time) continue;
+            $cloudPct = (float)($h['cloud'] ?? 50); // 0-100 %
+            $hour = (int)substr($time, 11, 2);
+
+            // Aproximace tilted irradiance z hodinového vzorce + cloud cover
+            // Solar elevation pro Českou republiku ~50°N v létě
+            // Max irradiance ve 12-13h: ~900 W/m² při jasné obloze
+            $maxGti = 900;
+            $solarHour = $hour - 12; // -12..+12
+            $elevationFactor = max(0, cos(deg2rad($solarHour * 15))); // hrubý odhad
+            $cloudFactor = 1 - ($cloudPct / 100) * 0.75; // i v mracích něco prochází
+            $gti = $maxGti * $elevationFactor * $cloudFactor;
+
+            // Korekce na tilt: panely na fixním sklonu jsou v zimě efektivnější
+            // (zanedbáme, je to jen odhad)
+
+            $kw = max(0, round($gti / 1000 * $kwp * $pr * $loss, 3));
+            $tsFormatted = $time . ':00';
+            $forecast[] = ['ts' => $tsFormatted, 'power_kw' => $kw];
+        }
+    }
+
+    return empty($forecast) ? null : $forecast;
 }
 
 /**
