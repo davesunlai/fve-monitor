@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## v0.62.3 — 2026-06-04 — Úklid serveru
+
+### Změněno
+- 🧹 **Server uklizen** — zastaveny a zakázány nepoužívané služby:
+  - `fve-poller.service` — generoval jen MOCK data a selhával zápisem do InfluxDB
+  - `influxdb.service` — žádné reálné využití (212 MB RAM)
+  - `grafana-server` — ručně vypnuto (žádné aktivní dashboardy)
+- Uvolněno **~400 MB RAM**
+- Smazány obrovské logy `fve-poller` (49 MB)
+- Z hamburger menu odebrán odkaz "📉 Podrobné grafy" na Grafanu
+
+### Bez dopadu
+- ✅ MariaDB data (production_realtime, production_daily, pvgis_monthly) — beze změny
+- ✅ Cron joby (fetch_realtime, fetch_daily, refresh_pvgis, send_push, spot_prices) — beze změny
+- ✅ FVE Monitor (fve.sunlai.org) plně funkční
+
+---
+
 ## v0.76.0 — 2026-05-29 — ACL systém, Activity log, Yearly report
 ### Přidáno
 - 📒 **Activity tracking & login audit** (`/admin/login_log.php`)
