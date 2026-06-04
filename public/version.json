@@ -1,5 +1,4 @@
 {
-  "version": "0.76.0",
-  "buildDate": "2026-05-29",
-  "feature": "Activity log + login audit, Yearly report (CSV/XLSX export), správa uživatelů + ACL per-stránka, PDO timezone fix"
+  "version": "0.62.3",
+  "message": "🧹 Verze 0.62.3 - úklid serveru: vypnutí Grafany a InfluxDB"
 }
