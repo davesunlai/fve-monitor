@@ -33,6 +33,17 @@ class Auth
     }
 
     /**
+     * Znovuotevře session pro zápis (po session_write_close()).
+     * Použít v login/logout/passkey flow, kde je potřeba do session zapisovat.
+     */
+    public static function reopen(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) return;
+        session_name(self::SESSION_NAME);
+        @session_start();
+    }
+
+    /**
      * Ověří username/heslo a přihlásí uživatele.
      * @return array|null User row z DB, nebo null pokud selhalo.
      */

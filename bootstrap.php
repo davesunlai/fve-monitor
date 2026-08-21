@@ -36,6 +36,12 @@ if (!is_dir($config['app']['log_dir'])) {
 // Activity tracking (heartbeat) — tichý, nesmí shodit aplikaci
 if (PHP_SAPI !== 'cli') {
     \FveMonitor\Lib\ActivityTracker::track();
+    // Session lock fix: session je od teď read-only ($_SESSION zůstává čitelná).
+    // Paralelní AJAX requesty tak neblokují jeden druhého.
+    // Stránky co potřebují zápis (login/logout/passkey) volají Auth::reopen().
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
 }
 
 return $config;
